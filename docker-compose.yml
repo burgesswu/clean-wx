@@ -1,0 +1,33 @@
+version: '3'
+services:
+  web:
+    container_name: wx-web
+    links:
+      - db
+    build: ./
+  db:
+    image: mysql/mysql-server:latest
+    container_name: wx-mysql
+    command: --default-authentication-plugin=mysql_native_password
+    ports:
+      - "32000:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root@789
+    volumes:
+      - ./mysql/db:/var/lib/mysql
+      - "./mysql/conf:/etc/my.cnf.d"
+      - ./mysql/init:/docker-entrypoint-initdb.d/
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    command: --appendonly yes
+    ports:
+      - 6380:6379
+    volumes:
+      - ./redis_data:/data
+
+
+networks:
+  dev:
+    driver: bridge

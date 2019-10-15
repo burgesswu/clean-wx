@@ -1,0 +1,6 @@
+redis
+flask_sqlalchemy
+SQLAlchemy
+PyMySQL
+requests
+pymysql
