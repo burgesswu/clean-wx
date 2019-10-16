@@ -75,12 +75,10 @@ def user_index():
 @app.route('/admin/login', methods=('GET', 'POST','OPTIONS'))
 def admin_login():
     if request.method == 'OPTIONS':
-        result_text = {"statusCode": 200, "message": "文件上传成功"}
-        response = make_response(jsonify(result_text))
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'OPTIONS,HEAD,GET,POST'
-        response.headers['Access-Control-Allow-Headers'] = 'x-requested-with'
-        return response
+        resp = jsonify({'error': False})
+        # 跨域设置
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
     mobile = request.args.get('mobile')
     password = request.args.get('password')
     if not password:
