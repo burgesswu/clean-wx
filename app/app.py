@@ -8,7 +8,6 @@ import redis
 from flask_sqlalchemy import SQLAlchemy
 from flask import Flask, render_template, json, jsonify, request, make_response
 import requests
-
 app = Flask(__name__)
 
 re_1 = redis.Redis(host='redis', port=6379)
@@ -68,6 +67,10 @@ def index():
 def user_index():
     return 'userPage'
 
+#========================zhaoxin===============================================
+
+
+#=========================zhaoxin==============================================
 
 def run_wxpy():
     print("------------------")
