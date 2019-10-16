@@ -7,9 +7,12 @@ import urllib
 import redis
 from flask_sqlalchemy import SQLAlchemy
 from flask import Flask, render_template, json, jsonify, request, make_response
+from flask_cors import CORS
+# r'/*' 是通配符，让本服务器所有的URL 都允许跨域请求
+
 import requests
 app = Flask(__name__)
-
+CORS(app, resources=r'/*')
 re_1 = redis.Redis(host='redis', port=6379)
 app.config.from_object('config')
 db = SQLAlchemy(app, use_native_unicode='utf8')
@@ -69,8 +72,15 @@ def user_index():
 
 #========================zhaoxin===============================================
 # 总后台登录
-@app.route('/admin/login', methods=('GET', 'POST'))
+@app.route('/admin/login', methods=('GET', 'POST','OPTIONS'))
 def admin_login():
+    if request.method == 'OPTIONS':
+        result_text = {"statusCode": 200, "message": "文件上传成功"}
+        response = make_response(jsonify(result_text))
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'OPTIONS,HEAD,GET,POST'
+        response.headers['Access-Control-Allow-Headers'] = 'x-requested-with'
+        return response
     mobile = request.args.get('mobile')
     password = request.args.get('password')
     if not password:
