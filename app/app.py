@@ -68,6 +68,23 @@ def user_index():
     return 'userPage'
 
 #========================zhaoxin===============================================
+# 总后台登录
+@app.route('/admin/login', methods=('GET', 'POST'))
+def admin_login():
+    mobile = request.args.get('mobile')
+    password = request.args.get('password')
+    if not password:
+        password = "1"
+
+    m.update(password.encode(encoding='utf-8'))
+    password_hash = m.hexdigest()
+    s = User.query.get(1)
+    User.query.filter_by(id = mobile,password_hash = password_hash).all()
+    if s is None:
+        return "空数据"
+    else:
+        return "有数据"
+
 
 
 #=========================zhaoxin==============================================
