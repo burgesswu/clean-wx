@@ -11,6 +11,7 @@ from flask_cors import CORS
 # r'/*' 是通配符，让本服务器所有的URL 都允许跨域请求
 
 import requests
+
 app = Flask(__name__)
 CORS(app, resources=r'/*')
 re_1 = redis.Redis(host='redis', port=6379)
@@ -30,9 +31,11 @@ class User(db.Model):
     """用户"""
     __tablename__ = 'users'
     __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
-    id = db.Column(db.String(32), doc='手机号码', primary_key=True)
+    id = db.Column(db.Integer, doc='用户id', primary_key=True, autoincrement=True, unique=True, nullable=False,
+                   default=False)
     nickname = db.Column(db.String(20), doc='昵称', default='Wanted User', nullable=False, unique=True)
     password_hash = db.Column(db.String(128), doc='密码', nullable=False)
+    mobile = db.Column(db.String(120), doc='手机号码', nullable=False)
     payPassword = db.Column(db.String(32), doc='支付密码', nullable=False)
     money = db.Column(db.Float, doc='账户余额', default=50, nullable=False)
     description = db.Column(db.String(50), doc='个性签名', default='这个人很懒，什么也没留下', nullable=False)
@@ -70,9 +73,10 @@ def index():
 def user_index():
     return 'userPage'
 
-#========================zhaoxin===============================================
+
+# ========================zhaoxin===============================================
 # 总后台登录
-@app.route('/admin/login', methods=('GET', 'POST','OPTIONS'))
+@app.route('/admin/login', methods=('GET', 'POST', 'OPTIONS'))
 def admin_login():
     if request.method == 'OPTIONS':
         result_text = {"statusCode": 200, "message": "文件上传成功"}
@@ -89,15 +93,14 @@ def admin_login():
     m.update(password.encode(encoding='utf-8'))
     password_hash = m.hexdigest()
     s = User.query.get(1)
-    User.query.filter_by(id = mobile,password_hash = password_hash).all()
+    User.query.filter_by(id=mobile, password_hash=password_hash).all()
     if s is None:
         return "空数据"
     else:
         return "有数据"
 
 
-
-#=========================zhaoxin==============================================
+# =========================zhaoxin==============================================
 
 def run_wxpy():
     print("------------------")
@@ -174,7 +177,8 @@ def login_remote_service():
         return 'error'
 
 
-@app.route('/user/login')
+# 用户接口
+@app.route('/user/login', methods=('GET', 'POST'))
 def user_login():
     # db.create_all()
     return render_template('user/login.html')
@@ -182,14 +186,26 @@ def user_login():
 
 @app.route('/user/login_page')
 def user_login_page():
-    return render_template('user/login.html')
+    return render_template('user/account_login.html')
 
 
-@app.route('/user/register')
+@app.route('/user/register', methods=('GET', 'POST'))
 def user_register():
-    return render_template('user/login.html')
+    if request.method == 'GET':
+        return render_template('user/regist.html')
+    if request.method == 'POST':
+        form = request.form
+        password = ('wx-clean' + form.get('password')).encode(encoding='utf-8')
+        m.update(password)
+        user = User(mobile=form.get('username'), password_hash=m.hexdigest(), payPassword=m.hexdigest(), money=0,
+                    nickname=form.get('username'))
+
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({'code': 200, 'url': '/user/login'})
 
 
+# 微信接口
 @app.route('/callback_login', methods=('GET', 'POST'))
 def callback_login():
     # global qrSource
@@ -361,8 +377,13 @@ def check_zombie_callback():
         # if has_del or has_pull_black_list:
         #     send_card_msg(data.get('my_account'), 'filehelper', data.get('to_account'))
         #     send_card_msg2(data.get('my_account'), 'filehelper', data.get('to_account'))
-        # if data.get('result') == '1':
-        #     send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
+        if data.get('result') == '1':
+            send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
+        if data.get('result') == '2':
+            send_msg(data.get('my_account'), 'filehelper', '----------------被拉黑------------', 1)
+            send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
+            send_msg(data.get('my_account'), 'filehelper', '------------------------------', 1)
+
     else:
         print('-----------------')
     return 'success'
@@ -479,6 +500,9 @@ def do_action(my_account):
 def create_db():
     db.create_all()
     return '创建表'
+
+
+# 后台接口
 
 
 if __name__ == '__main__':
