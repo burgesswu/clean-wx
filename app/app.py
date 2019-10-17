@@ -9,7 +9,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask import Flask, render_template, json, jsonify, request, make_response
 from flask_cors import CORS
 # r'/*' 是通配符，让本服务器所有的URL 都允许跨域请求
-
 import requests
 
 app = Flask(__name__)
@@ -62,6 +61,12 @@ class Ciphers(db.Model):
     royalty = db.Column(db.Float, doc='提成比例', default=False)
 
 
+def en_pass(str_pass):
+    password = ('wx-clean' + str_pass).encode(encoding='utf-8')
+    m.update(password)
+    return m.hexdigest()
+
+
 # 后台管理端
 @app.route('/')
 def index():
@@ -76,28 +81,26 @@ def user_index():
 
 # ========================zhaoxin===============================================
 # 总后台登录
-@app.route('/admin/login', methods=('GET', 'POST', 'OPTIONS'))
+@app.route('/admin/login', methods=['POST'])
 def admin_login():
-    if request.method == 'OPTIONS':
-        result_text = {"statusCode": 200, "message": "文件上传成功"}
-        response = make_response(jsonify(result_text))
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'OPTIONS,HEAD,GET,POST'
-        response.headers['Access-Control-Allow-Headers'] = 'x-requested-with'
-        return response
-    mobile = request.args.get('mobile')
-    password = request.args.get('password')
-    if not password:
-        password = "1"
+    form = request.form
+    username = form.get('username')
+    password = form.get('password')
+    print(password)
+    if username and password:
+        password = en_pass(password)
+        admin = User.query.filter(User.mobile == username, User.password_hash == password,
+                                  User.isAdmin == 1).first()
+        if admin is None:
+            res = {'msg': '用户名密码错误!', 'code': 1001}
 
-    m.update(password.encode(encoding='utf-8'))
-    password_hash = m.hexdigest()
-    s = User.query.get(1)
-    User.query.filter_by(id=mobile, password_hash=password_hash).all()
-    if s is None:
-        return "空数据"
+            return jsonify(res)
+        else:
+            res = {'msg': '成功!', 'code': 200, 'data': admin}
+            return jsonify(res)
     else:
-        return "有数据"
+        res = {'msg': '用户名密码不能为空!', 'code': 1001}
+        return jsonify(res)
 
 
 # =========================zhaoxin==============================================
@@ -195,9 +198,8 @@ def user_register():
         return render_template('user/regist.html')
     if request.method == 'POST':
         form = request.form
-        password = ('wx-clean' + form.get('password')).encode(encoding='utf-8')
-        m.update(password)
-        user = User(mobile=form.get('username'), password_hash=m.hexdigest(), payPassword=m.hexdigest(), money=0,
+        password = en_pass(form.get('password'))
+        user = User(mobile=form.get('username'), password_hash=password, payPassword=password, money=0,
                     nickname=form.get('username'))
 
         db.session.add(user)
