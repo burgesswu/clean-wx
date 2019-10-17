@@ -3,7 +3,6 @@ import random
 import threading
 import time
 import urllib
-
 import redis
 from flask_sqlalchemy import SQLAlchemy
 from flask import Flask, render_template, json, jsonify, request, make_response
@@ -22,10 +21,10 @@ m = hashlib.md5()
 # 当前登录回调的用户
 line_dict = set()
 
+
 qrSource = ''
 remote_url = 'http://159.138.135.12:8080'
 memberList = []
-
 
 class User(db.Model):
     """用户"""
@@ -50,17 +49,45 @@ class User(db.Model):
     type = db.Column(db.Boolean, doc='微信登录状态', default=False)
     taskId = db.Column(db.Integer, doc='任务Id', default=False)
 
+    def to_json(self):
+        return {
+            'id': self.id,
+            'nickname': self.nickname,
+            'mobile': self.mobile,
+            'payPassword': self.payPassword,
+            'money': self.money,
+            'description': self.description,
+            'isAdmin': self.isAdmin,
+            'isProxy': self.isProxy,
+            'loginCipher': self.loginCipher,
+            'account': self.account,
+            'accountAlias': self.accountAlias,
+            'name': self.name,
+            'headimg': self.headimg,
+            'status': self.status,
+            'type': self.type,
+            'taskId': self.taskId
+        }
+
 
 class Ciphers(db.Model):
     __tablename__ = 'ciphers'
     __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
     cipher = db.Column(db.String(32), doc='密钥', primary_key=True)
-    status = db.Column(db.Integer, doc='状态', default=False)
+    status = db.Column(db.Integer, doc='状态 1未提取，2已激活 3已过期', default=False)
     type = db.Column(db.Integer, doc='类型 1周卡 2 月卡 3年卡 ', default=False)
     activeTime = db.Column(db.DateTime, doc='激活时间', default=False)
     amount = db.Column(db.DECIMAL(10, 2), doc='价格', default=False)
     royalty = db.Column(db.Float, doc='提成比例', default=False)
-
+    def to_json(self):
+        return {
+            'cipher': self.cipher,
+            'status': self.status,
+            'type': self.type,
+            'activeTime': self.activeTime,
+            'amount': self.amount,
+            'royalty': self.royalty,
+        }
 
 # 后台管理端
 @app.route('/')
@@ -73,29 +100,53 @@ def index():
 def user_index():
     return 'userPage'
 
+def is_options():
 
+        resp = jsonify({'error': False})
+        # 跨域设置
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
 # ========================zhaoxin===============================================
 # 总后台登录
 @app.route('/admin/login', methods=('GET', 'POST', 'OPTIONS'))
 def admin_login():
     if request.method == 'OPTIONS':
-        resp = jsonify({'error': False})
-        # 跨域设置
-        resp.headers['Access-Control-Allow-Origin'] = '*'
-        return resp
-    mobile = request.args.get('mobile')
-    password = request.args.get('password')
-    if not password:
-        password = "1"
-
-    m.update(password.encode(encoding='utf-8'))
-    password_hash = m.hexdigest()
-    s = User.query.get(1)
-    User.query.filter_by(id=mobile, password_hash=password_hash).all()
-    if s is None:
-        return "空数据"
+        return is_options()
+    mobile = request.form['username']
+    password = request.form['password']
+    # mobile = request.args.get('username')
+    # password = request.args.get('password')
+    # if not password:
+    #     password = "1"
+    md5 = hashlib.md5()
+    md5.update(password.encode(encoding='utf-8'))
+    password_hash = md5.hexdigest()
+    # s = User.query.get(1)
+    data = User.query.filter_by(mobile=mobile, password_hash=password_hash).first()
+    if data is None:
+        return jsonify({'code':401,'user':data,'mobile':mobile,'password':password_hash})
     else:
-        return "有数据"
+        return jsonify({'code':200,'data':data.to_json()})
+#
+@app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
+def activeList():
+    if request.method == 'OPTIONS':
+        return is_options()
+    code = request.args.get('cipher')
+    pageNum = int(request.args.get('pageNum'))
+    pageSize = int(request.args.get('pageSize'))
+    #
+    if len(code) == 0 :
+        list = Ciphers.query.paginate(pageNum, pageSize)
+    else:
+        list = Ciphers.query.filter_by(cipher=code).paginate(pageNum, pageSize)
+    jsonData = {
+        'code':200,
+        'data':json.dumps(list.items),
+        'total':list.pages
+    }
+    return jsonify(jsonData)
+
 
 
 # =========================zhaoxin==============================================
@@ -504,4 +555,6 @@ def create_db():
 
 
 if __name__ == '__main__':
+    print('111', '测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试')
     app.run()
+
