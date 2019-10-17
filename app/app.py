@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import random
 import threading
@@ -10,6 +11,12 @@ from flask import Flask, render_template, json, jsonify, request, make_response
 from flask_cors import CORS
 # r'/*' 是通配符，让本服务器所有的URL 都允许跨域请求
 import requests
+from sqlalchemy.ext.declarative import declarative_base
+import json
+
+from uuid import UUID
+
+Base = declarative_base()
 
 app = Flask(__name__)
 CORS(app, resources=r'/*')
@@ -17,7 +24,7 @@ re_1 = redis.Redis(host='redis', port=6379)
 app.config.from_object('config')
 db = SQLAlchemy(app, use_native_unicode='utf8')
 # 创建md5对象
-m = hashlib.md5()
+
 # 当前登录回调的用户
 line_dict = set()
 
@@ -25,8 +32,48 @@ qrSource = ''
 remote_url = 'http://159.138.135.12:8080'
 memberList = []
 
+from sqlalchemy.ext.declarative import DeclarativeMeta
 
-class User(db.Model):
+
+class OutputMixin(object):
+    RELATIONSHIPS_TO_DICT = False
+
+    def __iter__(self):
+        return self.to_dict().iteritems()
+
+    def to_dict(self, rel=None, backref=None):
+        if rel is None:
+            rel = self.RELATIONSHIPS_TO_DICT
+        res = {column.key: getattr(self, attr)
+               for attr, column in self.__mapper__.c.items()}
+        if rel:
+            for attr, relation in self.__mapper__.relationships.items():
+                # Avoid recursive loop between to tables.
+                if backref == relation.table:
+                    continue
+                value = getattr(self, attr)
+                if value is None:
+                    res[relation.key] = None
+                elif isinstance(value.__class__, DeclarativeMeta):
+                    res[relation.key] = value.to_dict(backref=self.__table__)
+                else:
+                    res[relation.key] = [i.to_dict(backref=self.__table__)
+                                         for i in value]
+        return res
+
+    def to_json(self, rel=None):
+        def extended_encoder(x):
+            if isinstance(x, datetime):
+                return x.isoformat()
+            if isinstance(x, UUID):
+                return str(x)
+
+        if rel is None:
+            rel = self.RELATIONSHIPS_TO_DICT
+        return json.dumps(self.to_dict(rel), default=extended_encoder)
+
+
+class User(OutputMixin, db.Model):
     """用户"""
     __tablename__ = 'users'
     __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
@@ -50,27 +97,65 @@ class User(db.Model):
     taskId = db.Column(db.Integer, doc='任务Id', default=False)
 
 
-class Ciphers(db.Model):
+class Ciphers(OutputMixin, db.Model):
     __tablename__ = 'ciphers'
     __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
     cipher = db.Column(db.String(32), doc='密钥', primary_key=True)
     status = db.Column(db.Integer, doc='状态', default=False)
-    type = db.Column(db.Integer, doc='类型 1周卡 2 月卡 3年卡 ', default=False)
+    type = db.Column(db.Integer, doc='类型id ', default=False)
+    isActive = db.Column(db.Boolean, doc='是否激活', default=False)
+    isSale = db.Column(db.Boolean, doc='是否销售', default=False)
     activeTime = db.Column(db.DateTime, doc='激活时间', default=False)
+    saleTime = db.Column(db.DateTime, doc='销售时间', default=False)
+    proxyId = db.Column(db.Integer, doc='代理id ', default=False)
+    bindId = db.Column(db.Integer, doc='绑定id ', default=False)
+    activeDays = db.Column(db.Integer, doc='有效天数 ', default=False)
+
+
+class ActiveCodeOption(OutputMixin, db.Model):
+    __tablename__ = 'active_code_option'
+    __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
+    id = db.Column(db.Integer, doc='类型id', primary_key=True, autoincrement=True, unique=True, nullable=False,
+                   default=False)
+    name = db.Column(db.String(150), doc='名称', default=False)
+    price = db.Column(db.DECIMAL(10, 2), doc='价格', default=False)
+    activeDays = db.Column(db.Integer, doc='有效天数 ', default=False)
+    royalty = db.Column(db.Float, doc='优惠比例', default=False)
+
+
+class ActiveCodeBuy(OutputMixin, db.Model):
+    __tablename__ = 'active_code_buy'
+    __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
+    id = db.Column(db.Integer, doc='id', primary_key=True, autoincrement=True, unique=True, nullable=False,
+                   default=False)
+    orderNo = db.Column(db.String(150), doc='订单号', unique=True, nullable=False, default=False)
     amount = db.Column(db.DECIMAL(10, 2), doc='价格', default=False)
-    royalty = db.Column(db.Float, doc='提成比例', default=False)
+    buyTime = db.Column(db.DateTime, doc='购买时间', default=False)
+    cipher = db.Column(db.String(32), doc='密钥', nullable=False, default=False)
+    count = db.Column(db.Integer, doc='数量 ', default=False)
+    royaltyAmount = db.Column(db.Float, doc='优惠金额', default=False)
+
+
+class UserAmountRecord(OutputMixin, db.Model):
+    __tablename__ = 'user_amount_record'
+    __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
+    id = db.Column(db.Integer, doc='id', primary_key=True, autoincrement=True, unique=True, nullable=False,
+                   default=False)
+    orderNo = db.Column(db.String(150), doc='订单号', unique=True, nullable=False, default=False)
+    amount = db.Column(db.DECIMAL(10, 2), doc='金额', default=False)
+    status = db.Column(db.Integer, doc='状态', default=False)
+    type = db.Column(db.Integer, doc='类型 1转帐 2 购买激活码 3 充值', default=False)
+    addTime = db.Column(db.DateTime, doc='发生时间', default=False)
+    remark = db.Column(db.String(255), doc='说明', nullable=False, default=False)
+    fromId = db.Column(db.Integer, doc='来源 ', default=False)
+    toId = db.Column(db.Integer, doc='去向 ', default=False)
 
 
 def en_pass(str_pass):
+    m = hashlib.md5()
     password = ('wx-clean' + str_pass).encode(encoding='utf-8')
     m.update(password)
     return m.hexdigest()
-
-
-# 后台管理端
-@app.route('/')
-def index():
-    return 'Hello World!'
 
 
 # 用户端
@@ -86,21 +171,47 @@ def admin_login():
     form = request.form
     username = form.get('username')
     password = form.get('password')
-    print(password)
+    proxy = int(form.get('proxy', 0))
     if username and password:
         password = en_pass(password)
-        admin = User.query.filter(User.mobile == username, User.password_hash == password,
-                                  User.isAdmin == 1).first()
+        admin = User.query.filter(User.mobile == username,
+                                  User.isProxy == 1).first() if proxy == 1 else User.query.filter(
+            User.mobile == username, User.isAdmin == 1).first()
         if admin is None:
             res = {'msg': '用户名密码错误!', 'code': 1001}
-
             return jsonify(res)
         else:
-            res = {'msg': '成功!', 'code': 200, 'data': admin}
-            return jsonify(res)
+            adminUser = admin.__dict__
+            if adminUser['password_hash'] == password:
+                res = {'msg': '成功!', 'code': 200, 'data': json.loads(admin.to_json())}
+                return jsonify(res)
+            else:
+                res = {'msg': '用户名密码错误!', 'code': 1001}
+                return jsonify(res)
     else:
         res = {'msg': '用户名密码不能为空!', 'code': 1001}
         return jsonify(res)
+
+
+@app.route('/admin/register', methods=['POST'])
+def admin_register():
+    form = request.form
+    password = en_pass(form.get('password'))
+    proxy = int(form.get('proxy', 0))
+
+    userJudge = User.query.filter(User.mobile == form.get('username')).first()
+    if userJudge:
+        return jsonify({'code': 1002, 'message': '用户已经存在请更换用户名'})
+    else:
+        user = User(mobile=form.get('username'), password_hash=password, payPassword=password, money=0,
+                    nickname=form.get('username'))
+        if proxy == 1:
+            user.isProxy = 1
+        else:
+            user.isAdmin = 1
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({'code': 200, 'message': '注册成功'})
 
 
 # =========================zhaoxin==============================================
@@ -129,6 +240,7 @@ def login_remote_service():
         ticks = time.time()
         hswebtime = str(ticks) + '_' + str(random.randint(1, 50))
         b = (hswebtime + '399d3098a3627eb2df1329ccd77b03e87d556fcace085558250eeb126bc95e14').encode(encoding='utf-8')
+        m = hashlib.md5()
         m.update(b)
         token = m.hexdigest()
         re_1.set('token', token)
@@ -183,13 +295,43 @@ def login_remote_service():
 # 用户接口
 @app.route('/user/login', methods=('GET', 'POST'))
 def user_login():
-    # db.create_all()
-    return render_template('user/login.html')
+    if request.method == 'GET':
+
+        return render_template('user/login.html')
+    else:
+        activity_code = request.form.get('activity_code')
+        user = User.query.filter(User.loginCipher == activity_code).first()
+        if user:
+            return jsonify({'code': 200, 'url': '/api/login'})
+        else:
+            return jsonify({'code': 1003, 'url': '', 'message': '无效卡密'})
 
 
-@app.route('/user/login_page')
+@app.route('/user/login_page', methods=('GET', 'POST'))
 def user_login_page():
-    return render_template('user/account_login.html')
+    if request.method == 'GET':
+        return render_template('user/account_login.html')
+    if request.method == 'POST':
+        form = request.form
+        username = form.get('username')
+        password = form.get('password')
+        if username and password:
+            password = en_pass(password)
+            user = User.query.filter(User.mobile == username,
+                                     User.isProxy == 0, User.isAdmin == 0).first()
+            if user is None:
+                res = {'msg': '用户名密码错误!', 'code': 1001}
+                return jsonify(res)
+            else:
+                if user.__dict__['password_hash'] == password:
+                    res = {'msg': '成功!', 'code': 200, 'url': '/api/login'}
+                    return jsonify(res)
+                else:
+                    res = {'msg': '用户名密码错误!', 'code': 1001}
+                    return jsonify(res)
+        else:
+            res = {'msg': '用户名密码不能为空!', 'code': 1001}
+            return jsonify(res)
 
 
 @app.route('/user/register', methods=('GET', 'POST'))
@@ -199,12 +341,15 @@ def user_register():
     if request.method == 'POST':
         form = request.form
         password = en_pass(form.get('password'))
-        user = User(mobile=form.get('username'), password_hash=password, payPassword=password, money=0,
-                    nickname=form.get('username'))
-
-        db.session.add(user)
-        db.session.commit()
-        return jsonify({'code': 200, 'url': '/user/login'})
+        userJudge = User.query.filter(User.mobile == form.get('username'), User.isAdmin == 0, User.isProxy == 0).first()
+        if userJudge:
+            return jsonify({'code': 1002, 'message': '用户名已经存在'})
+        else:
+            user = User(mobile=form.get('username'), password_hash=password, payPassword=password, money=0,
+                        nickname=form.get('username'))
+            db.session.add(user)
+            db.session.commit()
+            return jsonify({'code': 200, 'url': '/user/login'})
 
 
 # 微信接口

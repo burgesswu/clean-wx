@@ -24,44 +24,59 @@ $(document).ready(function() {
     var that = this;
     ripple($(that), e);
     $(that).addClass("processing");
-    var activity_code = $(".activity_code").val();
-    console.log(activity_code);
-    console.log(activity_code.length);
-    if (activity_code.length<20) {
-      layer.msg("卡密格式不正确，请重新输入");
+    var username = $("#username").val();
+    var password = $("#password").val();
+    if (username.length=="") {
+      layer.msg("用户名不得为空，请重新输入");
        $(that).removeClass("processing");
        animating = false;
       return;
     }else{
-      $.post("/user/login",{activity_code:activity_code},function(result){
-        result = $.parseJSON(result);
-        switch(result.code)
-        {
-          case 100:
-            setTimeout(function(){
-              $(that).addClass("success");
-              setTimeout(function(){
-                  window.location.href = result.url;
-              },1000);
-              
-            },2000);
-            
-            break;
-          case 500:
-            alert('为了提高爆粉效果,暂时关闭，技术调整');
-            setTimeout(function(){
-                  window.location.reload()
-              },1000);
-            return false;
-            break;
-          default:
-            layer.msg(result.msg);
-            $(that).removeClass("processing");
-            animating = false;
-            break;
-        }
+      if (password.length<6) {
+          layer.msg("密码不得小于6位，请重新输入");
+          $("#password").val("");
+          $("#password").focus();
+         $(that).removeClass("processing");
+         animating = false;
         return;
-      });
+      }else{
+
+        $.post("/user/login_page",{username:username,password:password},function(result){
+          console.log(result)
+
+          switch(result.code)
+          {
+            case 200:
+              layer.msg(result.msg);
+              setTimeout(function(){
+                $(that).addClass("success");
+                setTimeout(function(){
+                    window.location.href = result.url;
+                },1000);
+                
+              },2000);
+              
+              break;
+            case 201:
+              layer.msg(result.msg);
+              $(that).removeClass("processing");
+              animating = false;
+              break;
+            case 202:
+              layer.msg(result.msg);
+              $(that).removeClass("processing");
+              animating = false;
+              break;
+            default:
+              layer.msg(result.msg);
+              $(that).removeClass("processing");
+              animating = false;
+              layer.msg(result.msg);
+          }
+          return;
+        });
+      }
+     
     }
     
     // setTimeout(function() {
