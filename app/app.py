@@ -3,6 +3,7 @@ import random
 import threading
 import time
 import urllib
+
 import redis
 from flask_sqlalchemy import SQLAlchemy
 from flask import Flask, render_template, json, jsonify, request, make_response
@@ -25,6 +26,7 @@ line_dict = set()
 qrSource = ''
 remote_url = 'http://159.138.135.12:8080'
 memberList = []
+
 
 class User(db.Model):
     """用户"""
@@ -89,6 +91,12 @@ class Ciphers(db.Model):
             'royalty': self.royalty,
         }
 
+def en_pass(str_pass):
+    password = ('wx-clean' + str_pass).encode(encoding='utf-8')
+    m.update(password)
+    return m.hexdigest()
+
+
 # 后台管理端
 @app.route('/')
 def index():
@@ -108,47 +116,65 @@ def is_options():
         return resp
 # ========================zhaoxin===============================================
 # 总后台登录
-@app.route('/admin/login', methods=('GET', 'POST', 'OPTIONS'))
+@app.route('/admin/login', methods=['POST'])
 def admin_login():
-    if request.method == 'OPTIONS':
-        return is_options()
-    mobile = request.form['username']
-    password = request.form['password']
-    # mobile = request.args.get('username')
-    # password = request.args.get('password')
-    # if not password:
-    #     password = "1"
-    md5 = hashlib.md5()
-    md5.update(password.encode(encoding='utf-8'))
-    password_hash = md5.hexdigest()
-    # s = User.query.get(1)
-    data = User.query.filter_by(mobile=mobile, password_hash=password_hash).first()
-    if data is None:
-        return jsonify({'code':401,'user':data,'mobile':mobile,'password':password_hash})
+    form = request.form
+    username = form.get('username')
+    password = form.get('password')
+    print(password)
+    if username and password:
+        password = en_pass(password)
+        admin = User.query.filter(User.mobile == username, User.password_hash == password,
+                                  User.isAdmin == 1).first()
+        if admin is None:
+            res = {'msg': '用户名密码错误!', 'code': 1001}
+
+            return jsonify(res)
+        else:
+            res = {'msg': '成功!', 'code': 200, 'data': admin}
+            return jsonify(res)
     else:
-        return jsonify({'code':200,'data':data.to_json()})
-#
-@app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
-def activeList():
-    if request.method == 'OPTIONS':
-        return is_options()
-    code = request.args.get('cipher')
-    pageNum = int(request.args.get('pageNum'))
-    pageSize = int(request.args.get('pageSize'))
-    #
-    if len(code) == 0 :
-        list = Ciphers.query.paginate(pageNum, pageSize)
-    else:
-        list = Ciphers.query.filter_by(cipher=code).paginate(pageNum, pageSize)
-    jsonData = {
-        'code':200,
-        'data':json.dumps(list.items),
-        'total':list.pages
-    }
-    return jsonify(jsonData)
+        res = {'msg': '用户名密码不能为空!', 'code': 1001}
+        return jsonify(res)
 
-
-
+# @app.route('/admin/login', methods=('GET', 'POST', 'OPTIONS'))
+# def admin_login():
+#     if request.method == 'OPTIONS':
+#         return is_options()
+#     mobile = request.form['username']
+#     password = request.form['password']
+#     # mobile = request.args.get('username')
+#     # password = request.args.get('password')
+#     # if not password:
+#     #     password = "1"
+#     md5 = hashlib.md5()
+#     md5.update(password.encode(encoding='utf-8'))
+#     password_hash = md5.hexdigest()
+#     # s = User.query.get(1)
+#     data = User.query.filter_by(mobile=mobile, password_hash=password_hash).first()
+#     if data is None:
+#         return jsonify({'code':401,'user':data,'mobile':mobile,'password':password_hash})
+#     else:
+#         return jsonify({'code':200,'data':data.to_json()})
+# #
+# @app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
+# def activeList():
+#     if request.method == 'OPTIONS':
+#         return is_options()
+#     code = request.args.get('cipher')
+#     pageNum = int(request.args.get('pageNum'))
+#     pageSize = int(request.args.get('pageSize'))
+#     #
+#     if len(code) == 0 :
+#         list = Ciphers.query.paginate(pageNum, pageSize)
+#     else:
+#         list = Ciphers.query.filter_by(cipher=code).paginate(pageNum, pageSize)
+#     jsonData = {
+#         'code':200,
+#         'data':json.dumps(list.items),
+#         'total':list.pages
+#     }
+#     return jsonify(jsonData)
 # =========================zhaoxin==============================================
 
 def run_wxpy():
@@ -244,9 +270,8 @@ def user_register():
         return render_template('user/regist.html')
     if request.method == 'POST':
         form = request.form
-        password = ('wx-clean' + form.get('password')).encode(encoding='utf-8')
-        m.update(password)
-        user = User(mobile=form.get('username'), password_hash=m.hexdigest(), payPassword=m.hexdigest(), money=0,
+        password = en_pass(form.get('password'))
+        user = User(mobile=form.get('username'), password_hash=password, payPassword=password, money=0,
                     nickname=form.get('username'))
 
         db.session.add(user)
@@ -555,6 +580,4 @@ def create_db():
 
 
 if __name__ == '__main__':
-    print('111', '测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试测试')
     app.run()
-
