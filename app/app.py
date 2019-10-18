@@ -143,7 +143,7 @@ class UserAmountRecord(OutputMixin, db.Model):
                    default=False)
     orderNo = db.Column(db.String(150), doc='订单号', unique=True, nullable=False, default=False)
     amount = db.Column(db.DECIMAL(10, 2), doc='金额', default=False)
-    status = db.Column(db.Integer, doc='状态', default=False)
+    status = db.Column(db.Integer, doc='状态 1发起 2完成', default=False)
     type = db.Column(db.Integer, doc='类型 1转帐 2 购买激活码 3 充值', default=False)
     addTime = db.Column(db.DateTime, doc='发生时间', default=False)
     remark = db.Column(db.String(255), doc='说明', nullable=False, default=False)
@@ -241,6 +241,23 @@ def admin_register():
         db.session.commit()
         return jsonify({'code': 200, 'message': '注册成功'})
 
+@app.route('/admin/recharge', methods=('POST','GET'))
+def recharge():
+    form = request.form
+    mobile = form.get('mobile')
+    amount = int(form.get('amount', 0))
+    adminId = int(form.get('adminId', 0))
+    #查询该用户
+    userInfo = User.query.filter(User.mobile == mobile,User.isProxy == 1).first()
+    if userInfo is None:
+        return jsonify({'code': 1002, 'message': '用户不存在'})
+    userAmount = userInfo.money
+    userInfo.money = userAmount+amount
+    db.session.add(userInfo)
+    db.session.commit()
+    #写入记录
+    addAmountRecord(amount,2,3,"充值",adminId,userInfo.id)
+    return jsonify({'code':200,'message':'充值成功'})
 
 @app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
 def activeList():
@@ -256,7 +273,17 @@ def activeList():
 
 
 # =========================zhaoxin==============================================
+#===================公共方法================================================
 
+#公共写入流水记录
+def addAmountRecord(amount,status,type,remark,fromId,toId):
+    orderNo = get_order_code()
+    addTime = str(time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
+    record = UserAmountRecord(orderNo=orderNo,amount=amount,status=status,type=type,addTime=addTime,remark=remark,fromId=fromId,toId=toId)
+    db.session.add(record)
+    db.session.commit()
+
+#===================公共方法================================================
 def run_wxpy():
     print("------------------")
 
