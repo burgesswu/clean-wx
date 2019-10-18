@@ -158,6 +158,28 @@ def en_pass(str_pass):
     return m.hexdigest()
 
 
+def convert_list_dict(items):
+    dict_list = []
+    for item in items:
+        dict_list.append(
+            json.loads(item.to_json())
+        )
+    return dict_list
+
+
+def build_page_data(pageData):
+    jsonData = {
+        'code': 200,
+        'records': convert_list_dict(pageData.items),
+        'total': pageData.total,
+        'pages': pageData.pages,
+        'current': pageData.page,
+        'hasPrev': pageData.has_prev,
+        'hasNext': pageData.has_next
+    }
+    return jsonData
+
+
 # 用户端
 @app.route('/user')
 def user_index():
@@ -214,23 +236,19 @@ def admin_register():
         return jsonify({'code': 200, 'message': '注册成功'})
 
 
-
 @app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
 def activeList():
     code = request.args.get('cipher')
     pageNum = int(request.args.get('pageNum'))
     pageSize = int(request.args.get('pageSize'))
     #
-    if len(code) == 0 :
-        list = Ciphers.query.paginate(pageNum, pageSize)
+    if not code or len(code) == 0:
+        ciphersPage = Ciphers.query.paginate(pageNum, pageSize)
     else:
-        list = Ciphers.query.filter_by(cipher=code).paginate(pageNum, pageSize)
-    jsonData = {
-        'code':200,
-        'data':json.dumps(list.items),
-        'total':list.pages
-    }
-    return jsonify(jsonData)
+        ciphersPage = Ciphers.query.filter_by(cipher=code).paginate(pageNum, pageSize)
+    return jsonify(build_page_data(ciphersPage))
+
+
 # =========================zhaoxin==============================================
 
 def run_wxpy():
