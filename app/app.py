@@ -215,24 +215,22 @@ def admin_register():
 
 
 
-# @app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
-# def activeList():
-#     if request.method == 'OPTIONS':
-#         return is_options()
-#     code = request.args.get('cipher')
-#     pageNum = int(request.args.get('pageNum'))
-#     pageSize = int(request.args.get('pageSize'))
-#     #
-#     if len(code) == 0 :
-#         list = Ciphers.query.paginate(pageNum, pageSize)
-#     else:
-#         list = Ciphers.query.filter_by(cipher=code).paginate(pageNum, pageSize)
-#     jsonData = {
-#         'code':200,
-#         'data':json.dumps(list.items),
-#         'total':list.pages
-#     }
-#     return jsonify(jsonData)
+@app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
+def activeList():
+    code = request.args.get('cipher')
+    pageNum = int(request.args.get('pageNum'))
+    pageSize = int(request.args.get('pageSize'))
+    #
+    if len(code) == 0 :
+        list = Ciphers.query.paginate(pageNum, pageSize)
+    else:
+        list = Ciphers.query.filter_by(cipher=code).paginate(pageNum, pageSize)
+    jsonData = {
+        'code':200,
+        'data':json.dumps(list.items),
+        'total':list.pages
+    }
+    return jsonify(jsonData)
 # =========================zhaoxin==============================================
 
 def run_wxpy():
