@@ -121,6 +121,7 @@ def admin_login():
     form = request.form
     username = form.get('username')
     password = form.get('password')
+    
     print(password)
     if username and password:
         password = en_pass(password)
