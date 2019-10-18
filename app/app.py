@@ -151,6 +151,12 @@ class UserAmountRecord(OutputMixin, db.Model):
     toId = db.Column(db.Integer, doc='去向 ', default=False)
 
 
+# 生成订单号
+def get_order_code():
+    order_no = str(time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))) + str(time.time()).replace('.', '')[-7:]
+    return order_no
+
+
 def en_pass(str_pass):
     m = hashlib.md5()
     password = ('wx-clean' + str_pass).encode(encoding='utf-8')
