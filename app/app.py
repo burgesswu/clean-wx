@@ -150,6 +150,16 @@ class UserAmountRecord(OutputMixin, db.Model):
     fromId = db.Column(db.Integer, doc='来源 ', default=False)
     toId = db.Column(db.Integer, doc='去向 ', default=False)
 
+    # 多个对象
+    def dobule_to_dict(self):
+        result = {}
+        for key in self.__mapper__.c.keys():
+            if getattr(self, key) is not None:
+                result[key] = str(getattr(self, key))
+            else:
+                result[key] = getattr(self, key)
+        return result
+
 
 # 生成订单号
 def get_order_code():
@@ -185,7 +195,17 @@ def build_page_data(pageData):
     }
     return jsonData
 
+def to_json(all_vendors):
+    v = [ ven.dobule_to_dict() for ven in all_vendors ]
+    return v
 
+def returnPage(listObj):
+    json = {
+        'code': 200,
+        'records': to_json(listObj.items),
+        'total': listObj.pages
+    }
+    return jsonify(json)
 # 用户端
 @app.route('/user')
 def user_index():
@@ -258,6 +278,16 @@ def recharge():
     #写入记录
     addAmountRecord(amount,2,3,"充值",adminId,userInfo.id)
     return jsonify({'code':200,'message':'充值成功'})
+
+
+@app.route('/admin/recharge/list', methods=('POST','GET'))
+def rechargeList():
+    #pageNum = int(request.args.get('pageNum'))
+    #pageSize = int(request.args.get('pageSize'))
+    pageNum = 1
+    pageSize = 10
+    ciphersPage = UserAmountRecord.query.filter_by().paginate(pageNum, pageSize)
+    return returnPage(ciphersPage)
 
 @app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
 def activeList():
