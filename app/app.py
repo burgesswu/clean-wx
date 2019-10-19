@@ -469,7 +469,7 @@ def addActiveCode():
     return jsonify({'code':1002,'message':'生成错误'})
 
 @app.route('/admin/activeCode/list', methods=('GET', 'POST', 'OPTIONS'))
-def activeList():
+def activeCodeList():
     cipher = request.args.get('cipher')
     pageNum = request.args.get('pageNum')
     pageSize = request.args.get('pageSize')
@@ -482,6 +482,24 @@ def activeList():
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
 
+#激活记录查询
+@app.route('/admin/active/list', methods=('GET', 'POST', 'OPTIONS'))
+def activeList():
+    cipher = request.args.get('cipher')
+    isProxy = request.args.get('isProxy')
+    pageNum = request.args.get('pageNum')
+    pageSize = request.args.get('pageSize')
+    pageNum = 1 if is_null(pageNum) else int(pageNum)
+    pageSize = allPageSize if is_null(pageSize) else int(pageSize)
+    isProxy = 0 if is_null(isProxy) else int(isProxy)
+
+    M = Ciphers.query.filter(Ciphers.isActive == 1,Ciphers.bindId>0)
+    if isProxy > 0:
+        M = M.filter(Ciphers.proxyId >0)
+    if not is_null(cipher):
+        M = M.filter_by(cipher=cipher)
+    ciphersPage = M.paginate(pageNum, pageSize)
+    return returnPage(ciphersPage)
 
 # =========================zhaoxin=========================================================================================================
 #===================公共方法================================================================================================================
