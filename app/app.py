@@ -23,7 +23,9 @@ CORS(app, resources=r'/*')
 re_1 = redis.Redis(host='redis', port=6379)
 app.config.from_object('config')
 db = SQLAlchemy(app, use_native_unicode='utf8')
-# 创建md5对象
+
+#公共页数
+allPageSize = 10
 
 # 当前登录回调的用户
 line_dict = set()
@@ -95,21 +97,39 @@ class User(OutputMixin, db.Model):
     status = db.Column(db.Integer, doc='微信状态', default=False)
     type = db.Column(db.Boolean, doc='微信登录状态', default=False)
     taskId = db.Column(db.Integer, doc='任务Id', default=False)
+    # 多个对象
+    def dobule_to_dict(self):
+        result = {}
+        for key in self.__mapper__.c.keys():
+            if getattr(self, key) is not None:
+                result[key] = str(getattr(self, key))
+            else:
+                result[key] = getattr(self, key)
+        return result
 
 
 class Ciphers(OutputMixin, db.Model):
     __tablename__ = 'ciphers'
     __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
-    cipher = db.Column(db.String(32), doc='密钥', primary_key=True)
+    cipher = db.Column(db.String(32), doc='密钥',primary_key=True )
     status = db.Column(db.Integer, doc='状态', default=False)
     type = db.Column(db.Integer, doc='类型id ', default=False)
     isActive = db.Column(db.Boolean, doc='是否激活', default=False)
     isSale = db.Column(db.Boolean, doc='是否销售', default=False)
-    activeTime = db.Column(db.DateTime, doc='激活时间', default=False)
-    saleTime = db.Column(db.DateTime, doc='销售时间', default=False)
+    activeTime = db.Column(db.DateTime, doc='激活时间', default=None)
+    saleTime = db.Column(db.DateTime, doc='销售时间', default=None)
     proxyId = db.Column(db.Integer, doc='代理id ', default=False)
     bindId = db.Column(db.Integer, doc='绑定id ', default=False)
     activeDays = db.Column(db.Integer, doc='有效天数 ', default=False)
+    # 多个对象
+    def dobule_to_dict(self):
+        result = {}
+        for key in self.__mapper__.c.keys():
+            if getattr(self, key) is not None:
+                result[key] = str(getattr(self, key))
+            else:
+                result[key] = getattr(self, key)
+        return result
 
 
 class ActiveCodeOption(OutputMixin, db.Model):
@@ -120,7 +140,16 @@ class ActiveCodeOption(OutputMixin, db.Model):
     name = db.Column(db.String(150), doc='名称', default=False)
     price = db.Column(db.DECIMAL(10, 2), doc='价格', default=False)
     activeDays = db.Column(db.Integer, doc='有效天数 ', default=False)
-    royalty = db.Column(db.Float, doc='优惠比例', default=False)
+    royalty = db.Column(db.Integer, doc='优惠比例', default=False)
+    # 多个对象
+    def dobule_to_dict(self):
+        result = {}
+        for key in self.__mapper__.c.keys():
+            if getattr(self, key) is not None:
+                result[key] = str(getattr(self, key))
+            else:
+                result[key] = getattr(self, key)
+        return result
 
 
 class ActiveCodeBuy(OutputMixin, db.Model):
@@ -134,6 +163,15 @@ class ActiveCodeBuy(OutputMixin, db.Model):
     cipher = db.Column(db.String(32), doc='密钥', nullable=False, default=False)
     count = db.Column(db.Integer, doc='数量 ', default=False)
     royaltyAmount = db.Column(db.Float, doc='优惠金额', default=False)
+    # 多个对象
+    def dobule_to_dict(self):
+        result = {}
+        for key in self.__mapper__.c.keys():
+            if getattr(self, key) is not None:
+                result[key] = str(getattr(self, key))
+            else:
+                result[key] = getattr(self, key)
+        return result
 
 
 class UserAmountRecord(OutputMixin, db.Model):
@@ -174,6 +212,7 @@ def en_pass(str_pass):
     return m.hexdigest()
 
 
+
 def convert_list_dict(items):
     dict_list = []
     for item in items:
@@ -199,13 +238,40 @@ def to_json(all_vendors):
     v = [ ven.dobule_to_dict() for ven in all_vendors ]
     return v
 
+#返回分页模板
 def returnPage(listObj):
     json = {
         'code': 200,
         'records': to_json(listObj.items),
-        'total': listObj.pages
+        'total': listObj.pages*allPageSize
     }
     return jsonify(json)
+
+#返回列表模板
+def returnList(list):
+    data = {
+        'code':200,
+        'records':to_json(list),
+    }
+    return jsonify(data)
+def is_null(val):
+    if val is None:
+        return True
+    if not val:
+        return True
+    if val == '':
+        return True
+    if val == 'null':
+        return True
+    if val == 'false':
+        return True
+    if val == 0 :
+        return True
+    if val == '0' :
+        return True
+    if val == False:
+        return True
+    return False
 # 用户端
 @app.route('/user')
 def user_index():
@@ -222,11 +288,10 @@ def admin_login():
     proxy = int(form.get('proxy', 0))
     if username and password:
         password = en_pass(password)
-        admin = User.query.filter(User.mobile == username,
-                                  User.isProxy == 1).first() if proxy == 1 else User.query.filter(
-            User.mobile == username, User.isAdmin == 1).first()
+        #admin = User.query.filter(User.mobile == username,User.isProxy == 1).first() if proxy == 1 else User.query.filter(User.mobile == username, User.isAdmin == 1).first()
+        admin = User.query.filter(User.mobile == username, User.isAdmin == 1).first()
         if admin is None:
-            res = {'msg': '用户名密码错误!', 'code': 1001}
+            res = {'msg': '用户名密码错误!!', 'code': 1001}
             return jsonify(res)
         else:
             adminUser = admin.__dict__
@@ -234,7 +299,7 @@ def admin_login():
                 res = {'msg': '成功!', 'code': 200, 'data': json.loads(admin.to_json())}
                 return jsonify(res)
             else:
-                res = {'msg': '用户名密码错误!', 'code': 1001}
+                res = {'msg': '用户名密码错误!','pa':password, 'code': 1001}
                 return jsonify(res)
     else:
         res = {'msg': '用户名密码不能为空!', 'code': 1001}
@@ -261,6 +326,7 @@ def admin_register():
         db.session.commit()
         return jsonify({'code': 200, 'message': '注册成功'})
 
+#充值接口
 @app.route('/admin/recharge', methods=('POST','GET'))
 def recharge():
     form = request.form
@@ -280,30 +346,145 @@ def recharge():
     return jsonify({'code':200,'message':'充值成功'})
 
 
+#充值记录
 @app.route('/admin/recharge/list', methods=('POST','GET'))
 def rechargeList():
-    #pageNum = int(request.args.get('pageNum'))
-    #pageSize = int(request.args.get('pageSize'))
-    pageNum = 1
-    pageSize = 10
-    ciphersPage = UserAmountRecord.query.filter_by().paginate(pageNum, pageSize)
+    orderNo = request.args.get('orderNo')
+    status = request.args.get('status')
+
+    pageNum = request.args.get('pageNum')
+    pageSize = request.args.get('pageSize')
+    pageNum = 1 if is_null(pageNum) else int(pageNum)
+    pageSize = allPageSize if is_null(pageSize) else int(pageSize)
+
+    M = UserAmountRecord.query.filter_by(type = 3)
+    if not is_null(orderNo):
+        M = M.filter_by(orderNo = orderNo)
+    if not is_null(status):
+        M = M.filter_by(status = status)
+    ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
 
-@app.route('/admin/activeList', methods=('GET', 'POST', 'OPTIONS'))
+#获取所有用户列表
+@app.route('/admin/user/all', methods=('POST','GET'))
+def allUserList():
+    list = User.query.filter().all()
+    return returnList(list)
+
+#获取用户列表
+@app.route('/admin/user/List', methods=('POST','GET'))
+def userList():
+    mobile = request.args.get('mobile')
+    pageNum = request.args.get('pageNum')
+    pageSize = request.args.get('pageSize')
+    pageNum = 1 if is_null(pageNum) else int(pageNum)
+    pageSize = allPageSize if is_null(pageSize) else int(pageSize)
+
+    M = User.query.filter_by(isProxy = 1)
+    if not is_null(mobile):
+        M = M.filter_by(mobile = mobile)
+    ciphersPage = M.paginate(pageNum, pageSize)
+    return returnPage(ciphersPage)
+
+#删除用户
+@app.route('/admin/user/delete', methods=('POST','GET'))
+def deleteUser():
+    userId = int(request.args.get('id'))
+    u = User.query.filter_by(id = userId).first()
+    db.session.delete(u)
+    db.session.commit()
+    return jsonify({'code':200,'data':{},'message':'删除成功'})
+#获取激活码类型列表
+@app.route('/admin/activeType/list', methods=('POST','GET'))
+def activeTypeList():
+    list = ActiveCodeOption.query.filter().first()
+    if is_null(list):
+        a = ActiveCodeOption(name="日卡",price=0,activeDays=1,royalty=0)
+        b = ActiveCodeOption(name="周卡",price=0,activeDays=7,royalty=0)
+        c = ActiveCodeOption(name="月卡",price=0,activeDays=30,royalty=0)
+        d = ActiveCodeOption(name="季卡",price=0,activeDays=90,royalty=0)
+        e = ActiveCodeOption(name="半年卡",price=0,activeDays=180,royalty=0)
+        f = ActiveCodeOption(name="年卡",price=0,activeDays=365,royalty=0)
+        db.session.add(a)
+        db.session.add(b)
+        db.session.add(c)
+        db.session.add(d)
+        db.session.add(e)
+        db.session.add(f)
+        db.session.commit()
+        return jsonify({'code':200})
+    list2 = ActiveCodeOption.query.filter().all()
+    return returnList(list2)
+
+#保存激活码类型
+@app.route('/admin/activeType/save', methods=('POST','GET'))
+def saveActiveType():
+    form = request.form
+    dayAmount = form.get('dayAmount')
+    dayBiLi = form.get('dayBiLi')
+    zhouAmount = form.get('zhouAmount')
+    zhouBiLi = form.get('zhouBiLi')
+    monthAmount = form.get('monthAmount')
+    monthBiLi = form.get('monthBiLi')
+    jiduAmount = form.get('jiduAmount')
+    jiduBiLi = form.get('jiduBiLi')
+    bannianAmount = form.get('bannianAmount')
+    bannianBiLi = form.get('bannianBiLi')
+    yearAmount = form.get('yearAmount')
+    yearBiLi = form.get('yearBiLi')
+    a = ActiveCodeOption.query.filter_by(name = '日卡').first()
+    a.price = int(dayAmount)
+    a.royalty = int(dayBiLi)
+    b = ActiveCodeOption.query.filter_by(name='周卡').first()
+    b.price = int(zhouAmount)
+    b.royalty = int(zhouBiLi)
+    c = ActiveCodeOption.query.filter_by(name='月卡').first()
+    c.price = int(monthAmount)
+    c.royalty = int(monthBiLi)
+    d = ActiveCodeOption.query.filter_by(name='季卡').first()
+    d.price = int(jiduAmount)
+    d.royalty = int(jiduBiLi)
+    e = ActiveCodeOption.query.filter_by(name='半年卡').first()
+    e.price = int(bannianAmount)
+    e.royalty = int(bannianBiLi)
+    f = ActiveCodeOption.query.filter_by(name='年卡').first()
+    f.price = int(yearAmount)
+    f.royalty = int(yearBiLi)
+    db.session.commit()
+    return jsonify({'code':200})
+
+#后台生成激活码
+@app.route('/admin/activeCode/add', methods=('POST','GET'))
+def addActiveCode():
+
+    form = request.form
+    adminId = int(form.get('adminId'))
+    typeId = int(form.get('typeId'))
+    admin = User.query.filter_by(id=adminId,isAdmin = 1).first()
+    if is_null(admin):
+        return jsonify({'code':1001,'message':'权限错误'})
+    create = createActiveCode(typeId)
+    if create:
+        return jsonify({'code':200,'message':'生成成功'})
+    return jsonify({'code':1002,'message':'生成错误'})
+
+@app.route('/admin/activeCode/list', methods=('GET', 'POST', 'OPTIONS'))
 def activeList():
-    code = request.args.get('cipher')
-    pageNum = int(request.args.get('pageNum'))
-    pageSize = int(request.args.get('pageSize'))
-    #
-    if not code or len(code) == 0:
-        ciphersPage = Ciphers.query.paginate(pageNum, pageSize)
-    else:
-        ciphersPage = Ciphers.query.filter_by(cipher=code).paginate(pageNum, pageSize)
-    return jsonify(build_page_data(ciphersPage))
+    cipher = request.args.get('cipher')
+    pageNum = request.args.get('pageNum')
+    pageSize = request.args.get('pageSize')
+    pageNum = 1 if is_null(pageNum) else int(pageNum)
+    pageSize = allPageSize if is_null(pageSize) else int(pageSize)
+
+    M = Ciphers.query.filter_by()
+    if not is_null(cipher):
+        M = M.filter_by(cipher=cipher)
+    ciphersPage = M.paginate(pageNum, pageSize)
+    return returnPage(ciphersPage)
 
 
-# =========================zhaoxin==============================================
-#===================公共方法================================================
+# =========================zhaoxin=========================================================================================================
+#===================公共方法================================================================================================================
 
 #公共写入流水记录
 def addAmountRecord(amount,status,type,remark,fromId,toId):
@@ -312,6 +493,44 @@ def addAmountRecord(amount,status,type,remark,fromId,toId):
     record = UserAmountRecord(orderNo=orderNo,amount=amount,status=status,type=type,addTime=addTime,remark=remark,fromId=fromId,toId=toId)
     db.session.add(record)
     db.session.commit()
+
+#后台创建激活码
+def createActiveCode(typeId):
+    cipher = getCode()
+    c = Ciphers()
+    c.cipher = cipher
+    c.activeDays = 0
+    c.status = 0
+    c.type = typeId
+    c.isActive = False
+    c.isSale = False
+    c.proxyId = 0
+    c.bindId = 0
+    #查询出该类型的天数
+    a = ActiveCodeOption.query.filter_by(id=typeId).first()
+    c.activeDays = a.activeDays
+    db.session.add(c)
+    db.session.commit()
+    return True
+
+#获取不重复的激活码
+def getCode():
+
+    code = random.randint(0, 999999999)
+    md5Code = en_pass(str(code))
+    cipher = md5Code[1:9]
+    # 查询是否存在
+    check = Ciphers.query.filter_by(cipher=cipher).first()
+    if not is_null(check):
+        # 如果为空，
+        return getCode()
+    else:
+        return cipher
+
+
+
+
+
 
 #===================公共方法================================================
 def run_wxpy():
