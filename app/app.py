@@ -4,6 +4,7 @@ import random
 import threading
 import time
 import urllib
+from decimal import Decimal
 
 import redis
 from flask_sqlalchemy import SQLAlchemy
@@ -24,7 +25,7 @@ re_1 = redis.Redis(host='redis', port=6379)
 app.config.from_object('config')
 db = SQLAlchemy(app, use_native_unicode='utf8')
 
-#公共页数
+# 公共页数
 allPageSize = 10
 
 # 当前登录回调的用户
@@ -85,7 +86,7 @@ class User(OutputMixin, db.Model):
     password_hash = db.Column(db.String(128), doc='密码', nullable=False)
     mobile = db.Column(db.String(120), doc='手机号码', nullable=False)
     payPassword = db.Column(db.String(32), doc='支付密码', nullable=False)
-    money = db.Column(db.Float, doc='账户余额', default=50, nullable=False)
+    money = db.Column(db.DECIMAL(10, 2), doc='账户余额', default=0, nullable=False)
     description = db.Column(db.String(50), doc='个性签名', default='这个人很懒，什么也没留下', nullable=False)
     isAdmin = db.Column(db.Boolean, doc='是否管理员', default=False)
     isProxy = db.Column(db.Boolean, doc='是否是代理', default=False)
@@ -97,6 +98,7 @@ class User(OutputMixin, db.Model):
     status = db.Column(db.Integer, doc='微信状态', default=False)
     type = db.Column(db.Boolean, doc='微信登录状态', default=False)
     taskId = db.Column(db.Integer, doc='任务Id', default=False)
+
     # 多个对象
     def dobule_to_dict(self):
         result = {}
@@ -111,7 +113,7 @@ class User(OutputMixin, db.Model):
 class Ciphers(OutputMixin, db.Model):
     __tablename__ = 'ciphers'
     __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
-    cipher = db.Column(db.String(32), doc='密钥',primary_key=True )
+    cipher = db.Column(db.String(32), doc='密钥', primary_key=True)
     status = db.Column(db.Integer, doc='状态', default=False)
     type = db.Column(db.Integer, doc='类型id ', default=False)
     isActive = db.Column(db.Boolean, doc='是否激活', default=False)
@@ -121,6 +123,7 @@ class Ciphers(OutputMixin, db.Model):
     proxyId = db.Column(db.Integer, doc='代理id ', default=False)
     bindId = db.Column(db.Integer, doc='绑定id ', default=False)
     activeDays = db.Column(db.Integer, doc='有效天数 ', default=False)
+
     # 多个对象
     def dobule_to_dict(self):
         result = {}
@@ -141,6 +144,7 @@ class ActiveCodeOption(OutputMixin, db.Model):
     price = db.Column(db.DECIMAL(10, 2), doc='价格', default=False)
     activeDays = db.Column(db.Integer, doc='有效天数 ', default=False)
     royalty = db.Column(db.Integer, doc='优惠比例', default=False)
+
     # 多个对象
     def dobule_to_dict(self):
         result = {}
@@ -159,11 +163,12 @@ class ActiveCodeBuy(OutputMixin, db.Model):
                    default=False)
     orderNo = db.Column(db.String(150), doc='订单号', unique=True, nullable=False, default=False)
     amount = db.Column(db.DECIMAL(10, 2), doc='价格', default=False)
-    proxyId = db.Column(db.Integer,doc='代理id',default=False)
+    proxyId = db.Column(db.Integer, doc='代理id', default=False)
     buyTime = db.Column(db.DateTime, doc='购买时间', default=False)
-    cipher = db.Column(db.String(32), doc='密钥', nullable=False, default=False)
+    cipher = db.Column(db.TEXT(), doc='密钥', nullable=False, default=False)
     count = db.Column(db.Integer, doc='数量 ', default=False)
     royaltyAmount = db.Column(db.Float, doc='优惠金额', default=False)
+
     # 多个对象
     def dobule_to_dict(self):
         result = {}
@@ -213,7 +218,6 @@ def en_pass(str_pass):
     return m.hexdigest()
 
 
-
 def convert_list_dict(items):
     dict_list = []
     for item in items:
@@ -235,26 +239,31 @@ def build_page_data(pageData):
     }
     return jsonData
 
+
 def to_json(all_vendors):
-    v = [ ven.dobule_to_dict() for ven in all_vendors ]
+    v = [ven.dobule_to_dict() for ven in all_vendors]
     return v
 
-#返回分页模板
+
+# 返回分页模板
 def returnPage(listObj):
     json = {
         'code': 200,
         'records': to_json(listObj.items),
-        'total': listObj.pages*allPageSize
+        'total': listObj.pages * allPageSize
     }
     return jsonify(json)
 
-#返回列表模板
+
+# 返回列表模板
 def returnList(list):
     data = {
-        'code':200,
-        'records':to_json(list),
+        'code': 200,
+        'records': to_json(list),
     }
     return jsonify(data)
+
+
 def is_null(val):
     if val is None:
         return True
@@ -266,13 +275,15 @@ def is_null(val):
         return True
     if val == 'false':
         return True
-    if val == 0 :
+    if val == 0:
         return True
-    if val == '0' :
+    if val == '0':
         return True
     if val == False:
         return True
     return False
+
+
 # 用户端
 @app.route('/user')
 def user_index():
@@ -289,7 +300,7 @@ def admin_login():
     proxy = int(form.get('proxy', 0))
     if username and password:
         password = en_pass(password)
-        #admin = User.query.filter(User.mobile == username,User.isProxy == 1).first() if proxy == 1 else User.query.filter(User.mobile == username, User.isAdmin == 1).first()
+        # admin = User.query.filter(User.mobile == username,User.isProxy == 1).first() if proxy == 1 else User.query.filter(User.mobile == username, User.isAdmin == 1).first()
         admin = User.query.filter(User.mobile == username, User.isAdmin == 1).first()
         if admin is None:
             res = {'msg': '用户名密码错误!!', 'code': 1001}
@@ -300,11 +311,12 @@ def admin_login():
                 res = {'msg': '成功!', 'code': 200, 'data': json.loads(admin.to_json())}
                 return jsonify(res)
             else:
-                res = {'msg': '用户名密码错误!','pa':password, 'code': 1001}
+                res = {'msg': '用户名密码错误!', 'pa': password, 'code': 1001}
                 return jsonify(res)
     else:
         res = {'msg': '用户名密码不能为空!', 'code': 1001}
         return jsonify(res)
+
 
 # 代理登录
 @app.route('/proxy/login', methods=['POST'])
@@ -315,7 +327,7 @@ def proxy_login():
     proxy = int(form.get('proxy', 0))
     if username and password:
         password = en_pass(password)
-        #admin = User.query.filter(User.mobile == username,User.isProxy == 1).first() if proxy == 1 else User.query.filter(User.mobile == username, User.isAdmin == 1).first()
+        # admin = User.query.filter(User.mobile == username,User.isProxy == 1).first() if proxy == 1 else User.query.filter(User.mobile == username, User.isAdmin == 1).first()
         admin = User.query.filter(User.mobile == username, User.isProxy == 1).first()
         if admin is None:
             res = {'msg': '用户名密码错误!!', 'code': 1001}
@@ -326,11 +338,12 @@ def proxy_login():
                 res = {'msg': '成功!', 'code': 200, 'data': json.loads(admin.to_json())}
                 return jsonify(res)
             else:
-                res = {'msg': '用户名密码错误!','pa':password, 'code': 1001}
+                res = {'msg': '用户名密码错误!', 'pa': password, 'code': 1001}
                 return jsonify(res)
     else:
         res = {'msg': '用户名密码不能为空!', 'code': 1001}
         return jsonify(res)
+
 
 @app.route('/admin/register', methods=['POST'])
 def admin_register():
@@ -352,28 +365,29 @@ def admin_register():
         db.session.commit()
         return jsonify({'code': 200, 'message': '注册成功'})
 
-#充值接口
-@app.route('/admin/recharge', methods=('POST','GET'))
+
+# 充值接口
+@app.route('/admin/recharge', methods=('POST', 'GET'))
 def recharge():
     form = request.form
     mobile = form.get('mobile')
     amount = int(form.get('amount', 0))
     adminId = int(form.get('adminId', 0))
-    #查询该用户
-    userInfo = User.query.filter(User.mobile == mobile,User.isProxy == 1).first()
+    # 查询该用户
+    userInfo = User.query.filter(User.mobile == mobile, User.isProxy == 1).first()
     if userInfo is None:
         return jsonify({'code': 1002, 'message': '用户不存在'})
     userAmount = userInfo.money
-    userInfo.money = userAmount+amount
+    userInfo.money = userAmount + amount
     db.session.add(userInfo)
     db.session.commit()
-    #写入记录
-    addAmountRecord(amount,2,3,"充值",adminId,userInfo.id)
-    return jsonify({'code':200,'message':'充值成功'})
+    # 写入记录
+    addAmountRecord(amount, 2, 3, "充值", adminId, userInfo.id)
+    return jsonify({'code': 200, 'message': '充值成功'})
 
 
-#充值记录
-@app.route('/admin/recharge/list', methods=('POST','GET'))
+# 充值记录
+@app.route('/admin/recharge/list', methods=('POST', 'GET'))
 def rechargeList():
     orderNo = request.args.get('orderNo')
     status = request.args.get('status')
@@ -383,22 +397,24 @@ def rechargeList():
     pageNum = 1 if is_null(pageNum) else int(pageNum)
     pageSize = allPageSize if is_null(pageSize) else int(pageSize)
 
-    M = UserAmountRecord.query.filter_by(type = 3)
+    M = UserAmountRecord.query.filter_by(type=3)
     if not is_null(orderNo):
-        M = M.filter_by(orderNo = orderNo)
+        M = M.filter_by(orderNo=orderNo)
     if not is_null(status):
-        M = M.filter_by(status = status)
+        M = M.filter_by(status=status)
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
 
-#获取所有用户列表
-@app.route('/admin/user/all', methods=('POST','GET'))
+
+# 获取所有用户列表
+@app.route('/admin/user/all', methods=('POST', 'GET'))
 def allUserList():
     list = User.query.filter().all()
     return returnList(list)
 
-#获取用户列表
-@app.route('/admin/user/List', methods=('POST','GET'))
+
+# 获取用户列表
+@app.route('/admin/user/List', methods=('POST', 'GET'))
 def userList():
     mobile = request.args.get('mobile')
     pageNum = request.args.get('pageNum')
@@ -406,31 +422,34 @@ def userList():
     pageNum = 1 if is_null(pageNum) else int(pageNum)
     pageSize = allPageSize if is_null(pageSize) else int(pageSize)
 
-    M = User.query.filter_by(isProxy = 1)
+    M = User.query.filter_by(isProxy=1)
     if not is_null(mobile):
-        M = M.filter_by(mobile = mobile)
+        M = M.filter_by(mobile=mobile)
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
 
-#删除用户
-@app.route('/admin/user/delete', methods=('POST','GET'))
+
+# 删除用户
+@app.route('/admin/user/delete', methods=('POST', 'GET'))
 def deleteUser():
     userId = int(request.args.get('id'))
-    u = User.query.filter_by(id = userId).first()
+    u = User.query.filter_by(id=userId).first()
     db.session.delete(u)
     db.session.commit()
-    return jsonify({'code':200,'data':{},'message':'删除成功'})
-#获取激活码类型列表
-@app.route('/admin/activeType/list', methods=('POST','GET'))
+    return jsonify({'code': 200, 'data': {}, 'message': '删除成功'})
+
+
+# 获取激活码类型列表
+@app.route('/admin/activeType/list', methods=('POST', 'GET'))
 def activeTypeList():
     list = ActiveCodeOption.query.filter().first()
     if is_null(list):
-        a = ActiveCodeOption(name="日卡",price=0,activeDays=1,royalty=0)
-        b = ActiveCodeOption(name="周卡",price=0,activeDays=7,royalty=0)
-        c = ActiveCodeOption(name="月卡",price=0,activeDays=30,royalty=0)
-        d = ActiveCodeOption(name="季卡",price=0,activeDays=90,royalty=0)
-        e = ActiveCodeOption(name="半年卡",price=0,activeDays=180,royalty=0)
-        f = ActiveCodeOption(name="年卡",price=0,activeDays=365,royalty=0)
+        a = ActiveCodeOption(name="日卡", price=0, activeDays=1, royalty=0)
+        b = ActiveCodeOption(name="周卡", price=0, activeDays=7, royalty=0)
+        c = ActiveCodeOption(name="月卡", price=0, activeDays=30, royalty=0)
+        d = ActiveCodeOption(name="季卡", price=0, activeDays=90, royalty=0)
+        e = ActiveCodeOption(name="半年卡", price=0, activeDays=180, royalty=0)
+        f = ActiveCodeOption(name="年卡", price=0, activeDays=365, royalty=0)
         db.session.add(a)
         db.session.add(b)
         db.session.add(c)
@@ -438,12 +457,13 @@ def activeTypeList():
         db.session.add(e)
         db.session.add(f)
         db.session.commit()
-        return jsonify({'code':200})
+        return jsonify({'code': 200})
     list2 = ActiveCodeOption.query.filter().all()
     return returnList(list2)
 
-#保存激活码类型
-@app.route('/admin/activeType/save', methods=('POST','GET'))
+
+# 保存激活码类型
+@app.route('/admin/activeType/save', methods=('POST', 'GET'))
 def saveActiveType():
     form = request.form
     dayAmount = form.get('dayAmount')
@@ -458,7 +478,7 @@ def saveActiveType():
     bannianBiLi = form.get('bannianBiLi')
     yearAmount = form.get('yearAmount')
     yearBiLi = form.get('yearBiLi')
-    a = ActiveCodeOption.query.filter_by(name = '日卡').first()
+    a = ActiveCodeOption.query.filter_by(name='日卡').first()
     a.price = int(dayAmount)
     a.royalty = int(dayBiLi)
     b = ActiveCodeOption.query.filter_by(name='周卡').first()
@@ -477,22 +497,23 @@ def saveActiveType():
     f.price = int(yearAmount)
     f.royalty = int(yearBiLi)
     db.session.commit()
-    return jsonify({'code':200})
+    return jsonify({'code': 200})
 
-#后台生成激活码
-@app.route('/admin/activeCode/add', methods=('POST','GET'))
+
+# 后台生成激活码
+@app.route('/admin/activeCode/add', methods=('POST', 'GET'))
 def addActiveCode():
-
     form = request.form
     adminId = int(form.get('adminId'))
     typeId = int(form.get('typeId'))
-    admin = User.query.filter_by(id=adminId,isAdmin = 1).first()
+    admin = User.query.filter_by(id=adminId, isAdmin=1).first()
     if is_null(admin):
-        return jsonify({'code':1001,'message':'权限错误'})
+        return jsonify({'code': 1001, 'message': '权限错误'})
     create = createActiveCode(typeId)
     if create:
-        return jsonify({'code':200,'message':'生成成功'})
-    return jsonify({'code':1002,'message':'生成错误'})
+        return jsonify({'code': 200, 'message': '生成成功'})
+    return jsonify({'code': 1002, 'message': '生成错误'})
+
 
 @app.route('/admin/activeCode/list', methods=('GET', 'POST', 'OPTIONS'))
 def activeCodeList():
@@ -508,7 +529,8 @@ def activeCodeList():
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
 
-#激活记录查询
+
+# 激活记录查询
 @app.route('/admin/active/list', methods=('GET', 'POST', 'OPTIONS'))
 def activeList():
     cipher = request.args.get('cipher')
@@ -519,39 +541,42 @@ def activeList():
     pageSize = allPageSize if is_null(pageSize) else int(pageSize)
     isProxy = 0 if is_null(isProxy) else int(isProxy)
 
-    M = Ciphers.query.filter(Ciphers.isActive == 1,Ciphers.bindId>0)
+    M = Ciphers.query.filter(Ciphers.isActive == 1, Ciphers.bindId > 0)
     if isProxy > 0:
-        M = M.filter(Ciphers.proxyId >0)
+        M = M.filter(Ciphers.proxyId > 0)
     if not is_null(cipher):
         M = M.filter_by(cipher=cipher)
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
-#切换绑定
+
+
+# 切换绑定
 @app.route('/admin/active/changeBind', methods=('GET', 'POST', 'OPTIONS'))
 def changeBind():
     form = request.form
     cipher = form.get('code')
     mobile = form.get('mobile')
     adminId = form.get('adminId')
-    admin = User.query.filter_by(id=adminId,isAdmin = 1).first()
+    admin = User.query.filter_by(id=adminId, isAdmin=1).first()
     if is_null(admin):
-        return jsonify({'code':1001,'message':'权限错误'})
-    #查询出新的账号
+        return jsonify({'code': 1001, 'message': '权限错误'})
+    # 查询出新的账号
     newUser = User.query.filter_by(mobile=mobile).first()
     if is_null(newUser):
         return jsonify({'code': 1002, 'message': '没有该账号'})
-    #查询出激活码
-    code = Ciphers.query.filter_by(cipher = cipher).first()
+    # 查询出激活码
+    code = Ciphers.query.filter_by(cipher=cipher).first()
     if is_null(code):
         return jsonify({'code': 1003, 'message': '没有该激活码'})
     if code.isActive != 1:
         return jsonify({'code': 1004, 'message': '激活码未激活'})
-    #切换绑定
+    # 切换绑定
     code.bindId = newUser.id
     db.session.commit()
-    return jsonify({'code':200})
+    return jsonify({'code': 200})
 
-#首页统计
+
+# 首页统计
 @app.route('/admin/active/count', methods=('GET', 'POST', 'OPTIONS'))
 def activeCount():
     dayCount = getDayCount()
@@ -559,16 +584,15 @@ def activeCount():
     ddayCount = getDDayCount()
     ddayAllCount = getDAllCount()
     return jsonify({
-        'code':200,
-        'dayCount':dayCount,
+        'code': 200,
+        'dayCount': dayCount,
         'dayAllCount': dayAllCount,
         'ddayCount': ddayCount,
         'ddayAllCount': ddayAllCount,
     })
 
+
 # =========================总后台接口地址=========================================================================================================
-
-
 
 
 # =========================代理接口地址=========================================================================================================
@@ -588,6 +612,7 @@ def proxyActiveCodeList():
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
 
+
 @app.route('/proxy/active/list', methods=('GET', 'POST', 'OPTIONS'))
 def proxyActiveList():
     cipher = request.args.get('cipher')
@@ -597,14 +622,15 @@ def proxyActiveList():
     pageNum = 1 if is_null(pageNum) else int(pageNum)
     pageSize = allPageSize if is_null(pageSize) else int(pageSize)
 
-    M = Ciphers.query.filter_by(proxyId=proxyId,isActive = 1)
+    M = Ciphers.query.filter_by(proxyId=proxyId, isActive=1)
     if not is_null(cipher):
         M = M.filter_by(cipher=cipher)
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
 
-#转账记录
-@app.route('/proxy/recharge/list', methods=('POST','GET'))
+
+# 转账记录
+@app.route('/proxy/recharge/list', methods=('POST', 'GET'))
 def ProxyRechargeList():
     proxyId = request.args.get('proxyId')
     orderNo = request.args.get('orderNo')
@@ -615,16 +641,17 @@ def ProxyRechargeList():
     pageNum = 1 if is_null(pageNum) else int(pageNum)
     pageSize = allPageSize if is_null(pageSize) else int(pageSize)
 
-    M = UserAmountRecord.query.filter_by(type = 1,fromId=proxyId)
+    M = UserAmountRecord.query.filter_by(type=1, fromId=proxyId)
     if not is_null(orderNo):
-        M = M.filter_by(orderNo = orderNo)
+        M = M.filter_by(orderNo=orderNo)
     if not is_null(status):
-        M = M.filter_by(status = status)
+        M = M.filter_by(status=status)
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
 
-#转账记录
-@app.route('/proxy/buy/list', methods=('POST','GET'))
+
+# 转账记录
+@app.route('/proxy/buy/list', methods=('POST', 'GET'))
 def ProxyBuyList():
     proxyId = request.args.get('proxyId')
     cipher = request.args.get('cipher')
@@ -633,43 +660,156 @@ def ProxyBuyList():
     pageSize = request.args.get('pageSize')
     pageNum = 1 if is_null(pageNum) else int(pageNum)
     pageSize = allPageSize if is_null(pageSize) else int(pageSize)
-
     M = ActiveCodeBuy.query.filter_by(proxyId=proxyId)
     if not is_null(orderNo):
-        M = M.filter_by(orderNo = orderNo)
+        M = M.filter_by(orderNo=orderNo)
     if not is_null(cipher):
-        M = M.filter_by(cipher = cipher)
+        M = M.filter_by(cipher=cipher)
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
-#首页统计
+
+
+# 首页统计
 @app.route('/proxy/active/count', methods=('GET', 'POST', 'OPTIONS'))
 def proxyActiveCount():
     proxyId = request.args.get('proxyId')
     ddayCount = getDDayCount(int(proxyId))
     ddayAllCount = getDAllCount(int(proxyId))
     return jsonify({
-        'code':200,
+        'code': 200,
         'ddayCount': ddayCount,
         'ddayAllCount': ddayAllCount,
     })
 
+
+# 充值转账接口
+@app.route('/proxy/to_recharge', methods=['POST'])
+def to_proxy_recharge():
+    form = request.form
+    mobile = form.get('mobile')
+    amount = int(form.get('amount', 0))
+    proxyId = int(form.get('proxyId', 0))
+    # 查询代理用户余额度
+    proxyUserInfo = User.query.filter(User.id == proxyId, User.isProxy == 1).first()
+    if proxyUserInfo is None:
+        return jsonify({'code': 1002, 'message': '参数错误'})
+
+    # 查询该用户
+    userInfo = User.query.filter(User.mobile == mobile, User.isProxy == 1).first()
+    if userInfo is None:
+        return jsonify({'code': 1002, 'message': '代理用户不存在'})
+    else:
+        if proxyUserInfo.id == userInfo.id:
+            return jsonify({'code': 1002, 'message': '非法操作'})
+    # 减掉代理帐号余额
+    if proxyUserInfo.money < amount:
+        return jsonify({'code': 1002, 'message': '余额不足'})
+    else:
+        proxyUserInfo.money = proxyUserInfo.money - amount
+        db.session.add(proxyUserInfo)
+        db.session.commit()
+    userAmount = userInfo.money
+    userInfo.money = userAmount + amount
+    db.session.add(userInfo)
+    db.session.commit()
+
+    # 写入记录
+    addAmountRecord(amount, 2, 2, "转账", proxyId, userInfo.id)
+    return jsonify({'code': 200, 'message': '转账成功'})
+
+
+# 激活卡密
+@app.route('/proxy/active/code', methods=['POST'])
+def proxy_active_code():
+    form = request.form
+    mobile = form.get('mobile')
+    code = form.get('code', '')
+    proxyId = int(form.get('proxyId', 0))
+    # 查询该用户
+    userInfo = User.query.filter(User.mobile == mobile, User.isProxy == 0, User.isAdmin == 0).first()
+    if userInfo is None:
+        return jsonify({'code': 1002, 'message': '用户不存在'})
+    ciphers = Ciphers.query.filter(Ciphers.cipher == code, Ciphers.proxyId == proxyId).first()
+    if ciphers is None:
+        return jsonify({'code': 1002, 'message': '没有该激活码'})
+    else:
+        if ciphers.__dict__['isActive'] != 0:
+            return jsonify({'code': 1002, 'message': '该卡密已经被激活'})
+    ciphers.bindId = userInfo.id
+    ciphers.isActive = 1
+    activeTime = str(time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
+    ciphers.activeTime = activeTime
+    db.session.add(ciphers)
+    db.session.commit()
+    # 写入记录
+    return jsonify({'code': 200, 'message': '激活成功'})
+
+
+# 购买卡密接口
+@app.route('/proxy/buy/ciphers', methods=['POST'])
+def proxy_buy_ciphers():
+    form = request.form
+    type = int(form.get('type', 0))
+    count = int(form.get('count', 0))
+    proxyId = int(form.get('proxyId', 0))
+    cipher_list = []
+    # 查询代理用户余额度
+    proxyUserInfo = User.query.filter(User.id == proxyId, User.isProxy == 1).first()
+    if proxyUserInfo is None:
+        return jsonify({'code': 1002, 'message': '参数错误'})
+    opt = ActiveCodeOption.query.filter(ActiveCodeOption.id == type).first()
+    if opt is None:
+        return jsonify({'code': 1002, 'message': '参数错误'})
+    # 判断余额
+    allTotal = opt.price * count * Decimal.from_float((1 - opt.royalty))
+    if allTotal > proxyUserInfo.money:
+        return jsonify({'code': 1002, 'message': '余额不足'})
+    ciphersList = Ciphers.query.filter(Ciphers.isActive == 0, Ciphers.isSale == 0, Ciphers.type == type).all()
+    if ciphersList is None:
+        return jsonify({'code': 1002, 'message': '没有该类型的库存了，请联系管理员'})
+    elif len(ciphersList) < count:
+        return jsonify({'code': 1002, 'message': '该类型的库存不足，请联系管理员'})
+    else:
+        for item in Ciphers.query.filter(Ciphers.isActive == 0, Ciphers.isSale == 0, Ciphers.type == type).limit(
+                count).all():
+            cipher_list.append(item.cipher)
+            item.isSale = 1
+            item.saleTime = str(time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
+            item.proxyId = proxyId
+            db.session.add(item)
+            db.session.commit()
+
+    # 减掉代理帐号余额
+    proxyUserInfo.money = proxyUserInfo.money - allTotal
+    db.session.add(proxyUserInfo)
+    db.session.commit()
+
+    # 写入记录
+    buyTime = str(time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
+    acb = ActiveCodeBuy(orderNo=get_order_code(), buyTime=buyTime, amount=allTotal, count=count, proxyId=proxyId,
+                        cipher=",".join(cipher_list))
+    db.session.add(acb)
+    db.session.commit()
+    addAmountRecord(allTotal, 2, 2, "购买激活码", proxyId, 0)
+    return jsonify({'code': 200, 'message': '购买激活码成功'})
+
+
 # =========================代理接口地址=========================================================================================================
 
 
+# ===================公共方法================================================================================================================
 
-
-
-#===================公共方法================================================================================================================
-
-#公共写入流水记录
-def addAmountRecord(amount,status,type,remark,fromId,toId):
+# 公共写入流水记录
+def addAmountRecord(amount, status, type, remark, fromId, toId):
     orderNo = get_order_code()
     addTime = str(time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
-    record = UserAmountRecord(orderNo=orderNo,amount=amount,status=status,type=type,addTime=addTime,remark=remark,fromId=fromId,toId=toId)
+    record = UserAmountRecord(orderNo=orderNo, amount=amount, status=status, type=type, addTime=addTime, remark=remark,
+                              fromId=fromId, toId=toId)
     db.session.add(record)
     db.session.commit()
 
-#后台创建激活码
+
+# 后台创建激活码
 def createActiveCode(typeId):
     cipher = getCode()
     c = Ciphers()
@@ -681,16 +821,16 @@ def createActiveCode(typeId):
     c.isSale = False
     c.proxyId = 0
     c.bindId = 0
-    #查询出该类型的天数
+    # 查询出该类型的天数
     a = ActiveCodeOption.query.filter_by(id=typeId).first()
     c.activeDays = a.activeDays
     db.session.add(c)
     db.session.commit()
     return True
 
-#获取不重复的激活码
-def getCode():
 
+# 获取不重复的激活码
+def getCode():
     code = random.randint(0, 999999999)
     md5Code = en_pass(str(code))
     cipher = md5Code[1:9]
@@ -702,15 +842,18 @@ def getCode():
     else:
         return cipher
 
-#生成当天激活的统计
+
+# 生成当天激活的统计
 def getDayCount():
-    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 AND DATE_FORMAT(activeTime,'%y%m%d') = DATE_FORMAT(NOW(),'%y%m%d')")
+    all = db.session.execute(
+        "select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 AND DATE_FORMAT(activeTime,'%y%m%d') = DATE_FORMAT(NOW(),'%y%m%d')")
     count = 0
     for x in all:
         count = count + x.dayCount
     return count
 
-#生成所有激活的统计
+
+# 生成所有激活的统计
 def getDayAllCount():
     all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 ")
     count = 0
@@ -718,33 +861,37 @@ def getDayAllCount():
         count = count + x.dayCount
     return count
 
-#生成代理当天激活的统计
-def getDDayCount(proxyId = 0):
-    string = ""
-    if proxyId >0:
-        string = " AND c.proxyId = "+ str(proxyId)
-    else:
-        string = " AND c.proxyId > 0 "
-    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 "+string+" AND DATE_FORMAT(activeTime,'%y%m%d') = DATE_FORMAT(NOW(),'%y%m%d')")
-    count = 0
-    for x in all:
-        count = count + x.dayCount
-    return count
 
-#生成代理所有激活的统计
-def getDAllCount(proxyId = 0):
+# 生成代理当天激活的统计
+def getDDayCount(proxyId=0):
     string = ""
     if proxyId > 0:
         string = " AND c.proxyId = " + str(proxyId)
     else:
         string = " AND c.proxyId > 0 "
-    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 "+string)
+    all = db.session.execute(
+        "select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 " + string + " AND DATE_FORMAT(activeTime,'%y%m%d') = DATE_FORMAT(NOW(),'%y%m%d')")
     count = 0
     for x in all:
         count = count + x.dayCount
     return count
 
-#===================公共方法================================================
+
+# 生成代理所有激活的统计
+def getDAllCount(proxyId=0):
+    string = ""
+    if proxyId > 0:
+        string = " AND c.proxyId = " + str(proxyId)
+    else:
+        string = " AND c.proxyId > 0 "
+    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 " + string)
+    count = 0
+    for x in all:
+        count = count + x.dayCount
+    return count
+
+
+# ===================公共方法================================================
 def run_wxpy():
     print("------------------")
 
