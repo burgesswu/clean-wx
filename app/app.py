@@ -500,6 +500,45 @@ def activeList():
         M = M.filter_by(cipher=cipher)
     ciphersPage = M.paginate(pageNum, pageSize)
     return returnPage(ciphersPage)
+#切换绑定
+@app.route('/admin/active/changeBind', methods=('GET', 'POST', 'OPTIONS'))
+def changeBind():
+    form = request.form
+    cipher = form.get('code')
+    mobile = form.get('mobile')
+    adminId = form.get('adminId')
+    admin = User.query.filter_by(id=adminId,isAdmin = 1).first()
+    if is_null(admin):
+        return jsonify({'code':1001,'message':'权限错误'})
+    #查询出新的账号
+    newUser = User.query.filter_by(mobile=mobile).first()
+    if is_null(newUser):
+        return jsonify({'code': 1002, 'message': '没有该账号'})
+    #查询出激活码
+    code = Ciphers.query.filter_by(cipher = cipher).first()
+    if is_null(code):
+        return jsonify({'code': 1003, 'message': '没有该激活码'})
+    if code.isActive != 1:
+        return jsonify({'code': 1004, 'message': '激活码未激活'})
+    #切换绑定
+    code.bindId = newUser.id
+    db.session.commit()
+    return jsonify({'code':200})
+
+#首页统计
+@app.route('/admin/active/count', methods=('GET', 'POST', 'OPTIONS'))
+def activeCount():
+    dayCount = getDayCount()
+    dayAllCount = getDayAllCount()
+    ddayCount = getDDayCount()
+    ddayAllCount = getDAllCount()
+    return jsonify({
+        'code':200,
+        'dayCount':dayCount,
+        'dayAllCount': dayAllCount,
+        'ddayCount': ddayCount,
+        'ddayAllCount': ddayAllCount,
+    })
 
 # =========================zhaoxin=========================================================================================================
 #===================公共方法================================================================================================================
@@ -545,10 +584,37 @@ def getCode():
     else:
         return cipher
 
+#生成当天激活的统计
+def getDayCount():
+    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 AND DATE_FORMAT(activeTime,'%y%m%d') = DATE_FORMAT(NOW(),'%y%m%d')")
+    count = 0
+    for x in all:
+        count = count + x.dayCount
+    return count
 
+#生成所有激活的统计
+def getDayAllCount():
+    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 ")
+    count = 0
+    for x in all:
+        count = count + x.dayCount
+    return count
 
+#生成代理当天激活的统计
+def getDDayCount():
+    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 AND c.proxyId >0 AND DATE_FORMAT(activeTime,'%y%m%d') = DATE_FORMAT(NOW(),'%y%m%d')")
+    count = 0
+    for x in all:
+        count = count + x.dayCount
+    return count
 
-
+#生成代理所有激活的统计
+def getDAllCount():
+    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 AND c.proxyId >0 ")
+    count = 0
+    for x in all:
+        count = count + x.dayCount
+    return count
 
 #===================公共方法================================================
 def run_wxpy():
