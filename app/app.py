@@ -159,6 +159,7 @@ class ActiveCodeBuy(OutputMixin, db.Model):
                    default=False)
     orderNo = db.Column(db.String(150), doc='订单号', unique=True, nullable=False, default=False)
     amount = db.Column(db.DECIMAL(10, 2), doc='价格', default=False)
+    proxyId = db.Column(db.Integer,doc='代理id',default=False)
     buyTime = db.Column(db.DateTime, doc='购买时间', default=False)
     cipher = db.Column(db.String(32), doc='密钥', nullable=False, default=False)
     count = db.Column(db.Integer, doc='数量 ', default=False)
@@ -278,7 +279,7 @@ def user_index():
     return 'userPage'
 
 
-# ========================zhaoxin===============================================
+# =========================总后台接口地址=========================================================================================================
 # 总后台登录
 @app.route('/admin/login', methods=['POST'])
 def admin_login():
@@ -305,6 +306,31 @@ def admin_login():
         res = {'msg': '用户名密码不能为空!', 'code': 1001}
         return jsonify(res)
 
+# 代理登录
+@app.route('/proxy/login', methods=['POST'])
+def proxy_login():
+    form = request.form
+    username = form.get('username')
+    password = form.get('password')
+    proxy = int(form.get('proxy', 0))
+    if username and password:
+        password = en_pass(password)
+        #admin = User.query.filter(User.mobile == username,User.isProxy == 1).first() if proxy == 1 else User.query.filter(User.mobile == username, User.isAdmin == 1).first()
+        admin = User.query.filter(User.mobile == username, User.isProxy == 1).first()
+        if admin is None:
+            res = {'msg': '用户名密码错误!!', 'code': 1001}
+            return jsonify(res)
+        else:
+            adminUser = admin.__dict__
+            if adminUser['password_hash'] == password:
+                res = {'msg': '成功!', 'code': 200, 'data': json.loads(admin.to_json())}
+                return jsonify(res)
+            else:
+                res = {'msg': '用户名密码错误!','pa':password, 'code': 1001}
+                return jsonify(res)
+    else:
+        res = {'msg': '用户名密码不能为空!', 'code': 1001}
+        return jsonify(res)
 
 @app.route('/admin/register', methods=['POST'])
 def admin_register():
@@ -540,7 +566,99 @@ def activeCount():
         'ddayAllCount': ddayAllCount,
     })
 
-# =========================zhaoxin=========================================================================================================
+# =========================总后台接口地址=========================================================================================================
+
+
+
+
+# =========================代理接口地址=========================================================================================================
+
+@app.route('/proxy/activeCode/list', methods=('GET', 'POST', 'OPTIONS'))
+def proxyActiveCodeList():
+    cipher = request.args.get('cipher')
+    proxyId = request.args.get('proxyId')
+    pageNum = request.args.get('pageNum')
+    pageSize = request.args.get('pageSize')
+    pageNum = 1 if is_null(pageNum) else int(pageNum)
+    pageSize = allPageSize if is_null(pageSize) else int(pageSize)
+
+    M = Ciphers.query.filter_by(proxyId=proxyId)
+    if not is_null(cipher):
+        M = M.filter_by(cipher=cipher)
+    ciphersPage = M.paginate(pageNum, pageSize)
+    return returnPage(ciphersPage)
+
+@app.route('/proxy/active/list', methods=('GET', 'POST', 'OPTIONS'))
+def proxyActiveList():
+    cipher = request.args.get('cipher')
+    pageNum = request.args.get('pageNum')
+    pageSize = request.args.get('pageSize')
+    proxyId = request.args.get('proxyId')
+    pageNum = 1 if is_null(pageNum) else int(pageNum)
+    pageSize = allPageSize if is_null(pageSize) else int(pageSize)
+
+    M = Ciphers.query.filter_by(proxyId=proxyId,isActive = 1)
+    if not is_null(cipher):
+        M = M.filter_by(cipher=cipher)
+    ciphersPage = M.paginate(pageNum, pageSize)
+    return returnPage(ciphersPage)
+
+#转账记录
+@app.route('/proxy/recharge/list', methods=('POST','GET'))
+def ProxyRechargeList():
+    proxyId = request.args.get('proxyId')
+    orderNo = request.args.get('orderNo')
+    status = request.args.get('status')
+
+    pageNum = request.args.get('pageNum')
+    pageSize = request.args.get('pageSize')
+    pageNum = 1 if is_null(pageNum) else int(pageNum)
+    pageSize = allPageSize if is_null(pageSize) else int(pageSize)
+
+    M = UserAmountRecord.query.filter_by(type = 1,fromId=proxyId)
+    if not is_null(orderNo):
+        M = M.filter_by(orderNo = orderNo)
+    if not is_null(status):
+        M = M.filter_by(status = status)
+    ciphersPage = M.paginate(pageNum, pageSize)
+    return returnPage(ciphersPage)
+
+#转账记录
+@app.route('/proxy/buy/list', methods=('POST','GET'))
+def ProxyBuyList():
+    proxyId = request.args.get('proxyId')
+    cipher = request.args.get('cipher')
+    orderNo = request.args.get('orderNo')
+    pageNum = request.args.get('pageNum')
+    pageSize = request.args.get('pageSize')
+    pageNum = 1 if is_null(pageNum) else int(pageNum)
+    pageSize = allPageSize if is_null(pageSize) else int(pageSize)
+
+    M = ActiveCodeBuy.query.filter_by(proxyId=proxyId)
+    if not is_null(orderNo):
+        M = M.filter_by(orderNo = orderNo)
+    if not is_null(cipher):
+        M = M.filter_by(cipher = cipher)
+    ciphersPage = M.paginate(pageNum, pageSize)
+    return returnPage(ciphersPage)
+#首页统计
+@app.route('/proxy/active/count', methods=('GET', 'POST', 'OPTIONS'))
+def proxyActiveCount():
+    proxyId = request.args.get('proxyId')
+    ddayCount = getDDayCount(int(proxyId))
+    ddayAllCount = getDAllCount(int(proxyId))
+    return jsonify({
+        'code':200,
+        'ddayCount': ddayCount,
+        'ddayAllCount': ddayAllCount,
+    })
+
+# =========================代理接口地址=========================================================================================================
+
+
+
+
+
 #===================公共方法================================================================================================================
 
 #公共写入流水记录
@@ -601,16 +719,26 @@ def getDayAllCount():
     return count
 
 #生成代理当天激活的统计
-def getDDayCount():
-    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 AND c.proxyId >0 AND DATE_FORMAT(activeTime,'%y%m%d') = DATE_FORMAT(NOW(),'%y%m%d')")
+def getDDayCount(proxyId = 0):
+    string = ""
+    if proxyId >0:
+        string = " AND c.proxyId = "+ str(proxyId)
+    else:
+        string = " AND c.proxyId > 0 "
+    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 "+string+" AND DATE_FORMAT(activeTime,'%y%m%d') = DATE_FORMAT(NOW(),'%y%m%d')")
     count = 0
     for x in all:
         count = count + x.dayCount
     return count
 
 #生成代理所有激活的统计
-def getDAllCount():
-    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 AND c.proxyId >0 ")
+def getDAllCount(proxyId = 0):
+    string = ""
+    if proxyId > 0:
+        string = " AND c.proxyId = " + str(proxyId)
+    else:
+        string = " AND c.proxyId > 0 "
+    all = db.session.execute("select COUNT(c.`cipher`) dayCount FROM ciphers c WHERE c.isActive = 1 "+string)
     count = 0
     for x in all:
         count = count + x.dayCount
