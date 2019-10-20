@@ -24,7 +24,7 @@ $(document).ready(function() {
     var that = this;
     ripple($(that), e);
     $(that).addClass("processing");
-    var activity_code = $(".activity_code").val();
+    let activity_code = $(".activity_code").val();
     console.log(activity_code);
     console.log(activity_code.length);
     if (activity_code.length<20) {
@@ -34,10 +34,9 @@ $(document).ready(function() {
       return;
     }else{
       $.post("/user/login",{activity_code:activity_code},function(result){
-        result = $.parseJSON(result);
         switch(result.code)
         {
-          case 100:
+          case 200:
             setTimeout(function(){
               $(that).addClass("success");
               setTimeout(function(){
@@ -48,14 +47,14 @@ $(document).ready(function() {
             
             break;
           case 500:
-            alert('为了提高爆粉效果,暂时关闭，技术调整');
+            // alert('为了提高爆粉效果,暂时关闭，技术调整');
             setTimeout(function(){
                   window.location.reload()
               },1000);
             return false;
             break;
           default:
-            layer.msg(result.msg);
+            layer.msg(result.message);
             $(that).removeClass("processing");
             animating = false;
             break;

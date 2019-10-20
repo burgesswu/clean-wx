@@ -43,7 +43,6 @@ $(document).ready(function() {
 
         $.post("/user/register",{username:activity_code,password:password},function(result){
           console.log(result)
-          result = $.parseJSON(result);
           switch(result.code)
           {
             case 200:

@@ -1,6 +1,7 @@
 import datetime
 import hashlib
 import random
+import string
 import threading
 import time
 import urllib
@@ -831,9 +832,9 @@ def createActiveCode(typeId):
 
 # 获取不重复的激活码
 def getCode():
-    code = random.randint(0, 999999999)
+    code = ''.join(random.sample(string.ascii_letters + string.digits, 20))
     md5Code = en_pass(str(code))
-    cipher = md5Code[1:9]
+    cipher = md5Code
     # 查询是否存在
     check = Ciphers.query.filter_by(cipher=cipher).first()
     if not is_null(check):
@@ -968,6 +969,21 @@ def login_remote_service():
         return 'error'
 
 
+def Caltime(date1, date2):
+    # %Y-%m-%d为日期格式，其中的-可以用其他代替或者不写，但是要统一，同理后面的时分秒也一样；可以只计算日期，不计算时间。
+    # date1=time.strptime(date1,"%Y-%m-%d %H:%M:%S")
+    # date2=time.strptime(date2,"%Y-%m-%d %H:%M:%S")
+    date1 = time.strptime(date1, "%Y-%m-%d")
+    date2 = time.strptime(date2, "%Y-%m-%d")
+    # 根据上面需要计算日期还是日期时间，来确定需要几个数组段。下标0表示年，小标1表示月，依次类推...
+    # date1=datetime.datetime(date1[0],date1[1],date1[2],date1[3],date1[4],date1[5])
+    # date2=datetime.datetime(date2[0],date2[1],date2[2],date2[3],date2[4],date2[5])
+    date1 = datetime.datetime(date1[0], date1[1], date1[2])
+    date2 = datetime.datetime(date2[0], date2[1], date2[2])
+    # 返回两个变量相差的值，就是相差天数
+    return date2 - date1
+
+
 # 用户接口
 @app.route('/user/login', methods=('GET', 'POST'))
 def user_login():
@@ -976,9 +992,21 @@ def user_login():
         return render_template('user/login.html')
     else:
         activity_code = request.form.get('activity_code')
-        user = User.query.filter(User.loginCipher == activity_code).first()
-        if user:
-            return jsonify({'code': 200, 'url': '/api/login'})
+        ciphers = Ciphers.query.filter(Ciphers.cipher == activity_code, Ciphers.isActive == 1,
+                                       Ciphers.bindId > 0).first()
+
+        # user = User.query.filter(User.loginCipher == activity_code).first()
+        if ciphers:
+            opt = ActiveCodeOption.query.filter_by(id=ciphers.type).first()
+            if opt is None:
+                return jsonify({'code': 1003, 'url': '', 'message': '无效卡密'})
+            else:
+                if Caltime(time, ciphers.activeTime) <= opt.activeDays:
+                    return jsonify({'code': 200, 'url': '/api/login'})
+                else:
+                    return jsonify({'code': 1003, 'url': '', 'message': '无效卡密'})
+
+
         else:
             return jsonify({'code': 1003, 'url': '', 'message': '无效卡密'})
 
