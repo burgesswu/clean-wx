@@ -31,8 +31,12 @@ allPageSize = 10
 
 # 当前登录回调的用户
 line_dict = set()
-
+black_list = []
+zombie_list = []
+friend_list = []
 qrSource = ''
+stepNum = 0
+loginStatus = 0
 remote_url = 'http://159.138.135.12:8080'
 memberList = []
 
@@ -1100,10 +1104,17 @@ def message_log():
     print('---------message_log--------------')
     data = request.form.get('data')
     data = json.loads(data)
+    global stepNum
     if data.get('to_account') == 'filehelper':
-        if data.get('content') == '1':
-            sync_friend_list(my_account=data.get('my_account'))
 
+        if data.get('content') == '100':
+            sync_friend_list(data.get('my_account'))
+        if data.get('content') == '1':
+            if stepNum == 4:
+                do_action_clean_auto(data.get('my_account'))
+        elif data.get('content') == '2':
+            if stepNum == 4:
+                do_action_clean_maul(data.get('my_account'))
     print(data)
     return data
 
@@ -1124,10 +1135,17 @@ def wacat_out():
     print('---------wacat_out--------------')
     data = request.form.get('data')
     data = json.loads(data)
+    global loginStatus
+    global stepNum
     if data.get('type') == 1:
-        send_msg(data.get('account'), 'filehelper', content='欢迎使用云尚清粉 \n 首次初始化 \n 请耐心等待 1～5分钟', content_type=1)
-        time.sleep(20)
-        sync_friend_list(data.get('account'))
+        if loginStatus == 0:
+            loginStatus = 1
+            stepNum = 1
+            send_msg(data.get('account'), 'filehelper', content='欢迎使用云尚清粉 \n 首次初始化 \n 请耐心等待 1～5分钟', content_type=1)
+            time.sleep(30)
+            sync_friend_list(data.get('account'))
+    else:
+        loginStatus = 0
 
     print(data)
     return data
@@ -1222,18 +1240,33 @@ def check_zombie_callback():
     data = request.form
     print(data)
     if data:
-        context = data.get('content')
-        # has_del = True if context.find("对方开启了朋友验证，你还不是他（她）朋友。请先发送朋友验证请求，对方验证通过后，才能聊天。") else False
-        # has_pull_black_list = True if context.find("消息已发出，但被对方拒收了。") else False
-        # if has_del or has_pull_black_list:
-        #     send_card_msg(data.get('my_account'), 'filehelper', data.get('to_account'))
-        #     send_card_msg2(data.get('my_account'), 'filehelper', data.get('to_account'))
+        global black_list
+        global zombie_list
+        global friend_list
+        global memberList
+        global stepNum
         if data.get('result') == '1':
-            send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
+            zombie_list.append(data)
+            # send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
         if data.get('result') == '2':
-            send_msg(data.get('my_account'), 'filehelper', '----------------被拉黑------------', 1)
-            send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
-            send_msg(data.get('my_account'), 'filehelper', '------------------------------', 1)
+            black_list.append(data)
+        # send_msg(data.get('my_account'), 'filehelper', '----------------被拉黑------------', 1)
+        # send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
+        # send_msg(data.get('my_account'), 'filehelper', '------------------------------', 1)
+        if data.get('result') == '0':
+            friend_list.append(data)
+        print(str(len(black_list)) + '_' + str(len(zombie_list)) + '_' + str(len(friend_list)) + '=' + str(
+            len(memberList)))
+        if (len(black_list) + len(zombie_list) + len(friend_list)) == len(memberList):
+            send_msg(data.get('my_account'), 'filehelper',
+                     '僵尸粉检测完毕！\n 总计人数' + str(len(memberList)) + '\n 被拉黑人数' + str(len(black_list)) + '\n 被删除人数' + str(
+                         len(zombie_list)),
+                     1)
+            stepNum = 3
+            time.sleep(5)
+            send_msg(data.get('my_account'), 'filehelper',
+                     '开始清理僵尸粉！\n回复 数字 1 发送名片并自动删除 \n回复 数字 2 发送只发送名片不删除\n请根据自己的需要选择对应的数字', 1)
+            stepNum = 4
 
     else:
         print('-----------------')
@@ -1341,9 +1374,45 @@ def sync_friend_list_callback():
 
 
 def do_action(my_account):
+    global black_list
+    global zombie_list
+    global friend_list
+    global stepNum
+    black_list = []
+    zombie_list = []
+    friend_list = []
+    stepNum = 2
     if len(memberList) > 0:
         for item in memberList:
             check_zombie(my_account=my_account, account=item['account'])
+    pass
+
+
+def do_action_clean_maul(my_account):
+    if len(black_list) > 0:
+        send_msg(my_account, 'filehelper', content='---------被拉黑列表-----------', content_type=1)
+        for item in black_list:
+            send_card_msg(my_account, 'filehelper', item['account'])
+
+    if len(zombie_list) > 0:
+        send_msg(my_account, 'filehelper', content='---------被删除列表-----------', content_type=1)
+        for item in zombie_list:
+            send_card_msg(my_account, 'filehelper', item['account'])
+    pass
+
+
+def do_action_clean_auto(my_account):
+    if len(black_list) > 0:
+        send_msg(my_account, 'filehelper', content='---------被拉黑列表-----------', content_type=1)
+        for item in black_list:
+            send_card_msg(my_account, 'filehelper', item['account'])
+            del_friend(my_account, item['account'])
+
+    if len(zombie_list) > 0:
+        send_msg(my_account, 'filehelper', content='---------被删除列表-----------', content_type=1)
+        for item in zombie_list:
+            send_card_msg(my_account, 'filehelper', item['account'])
+            del_friend(my_account, item['account'])
     pass
 
 
