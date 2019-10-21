@@ -104,6 +104,10 @@ class User(OutputMixin, db.Model):
     type = db.Column(db.Boolean, doc='微信登录状态', default=False)
     taskId = db.Column(db.Integer, doc='任务Id', default=False)
 
+    # 单个对象方法2
+    def single_to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
     # 多个对象
     def dobule_to_dict(self):
         result = {}
@@ -313,7 +317,7 @@ def admin_login():
         else:
             adminUser = admin.__dict__
             if adminUser['password_hash'] == password:
-                res = {'msg': '成功!', 'code': 200, 'data': json.loads(admin.to_json())}
+                res = {'msg': '成功!', 'code': 200, 'data': admin.single_to_dict()}
                 return jsonify(res)
             else:
                 res = {'msg': '用户名密码错误!', 'pa': password, 'code': 1001}
@@ -340,7 +344,7 @@ def proxy_login():
         else:
             adminUser = admin.__dict__
             if adminUser['password_hash'] == password:
-                res = {'msg': '成功!', 'code': 200, 'data': json.loads(admin.to_json())}
+                res = {'msg': '成功!', 'code': 200, 'data': admin.single_to_dict()}
                 return jsonify(res)
             else:
                 res = {'msg': '用户名密码错误!', 'pa': password, 'code': 1001}
