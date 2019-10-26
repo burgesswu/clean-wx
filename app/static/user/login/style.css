@@ -43,7 +43,8 @@ input, button {
 .cont {
   position: relative;
   height: 100%;
-  background-image: url("../slider-2.jpg");
+  /*background-image: url("../slider-2.jpg");*/
+  background-color: gray;
   background-size: cover;
   overflow: auto;
   font-family: "Open Sans", Helvetica, Arial, sans-serif;
@@ -63,8 +64,8 @@ input, button {
 .login {
   position: relative;
   height: 100%;
-  background: -webkit-linear-gradient(top, rgba(146, 135, 187, 0.8) 0%, rgba(0, 0, 0, 0.6) 100%);
-  background: linear-gradient(to bottom, rgba(146, 135, 187, 0.8) 0%, rgba(0, 0, 0, 0.6) 100%);
+  background: -webkit-linear-gradient(top, rgba(62, 20, 220, 1) 0%, rgba(255, 255, 255, 0.8) 100%);
+  background: linear-gradient(to bottom, rgba(62, 20, 220, 1) 0%, rgba(255, 255,255, 0.8) 100%);
   -webkit-transition: opacity 0.1s, -webkit-transform 0.3s cubic-bezier(0.17, -0.65, 0.665, 1.25);
   transition: opacity 0.1s, -webkit-transform 0.3s cubic-bezier(0.17, -0.65, 0.665, 1.25);
   transition: opacity 0.1s, transform 0.3s cubic-bezier(0.17, -0.65, 0.665, 1.25);
@@ -144,7 +145,7 @@ input, button {
   height: 4rem;
   margin: 5rem 0 2.2rem;
   color: rgba(255, 255, 255, 0.8);
-  background: #FF3366;
+  background: #421dff;
   font-size: 1.5rem;
   border-radius: 3rem;
   cursor: pointer;

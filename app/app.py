@@ -1,4 +1,5 @@
 import datetime
+import decimal
 import hashlib
 import random
 import string
@@ -9,7 +10,7 @@ from decimal import Decimal
 
 import redis
 from flask_sqlalchemy import SQLAlchemy
-from flask import Flask, render_template, json, jsonify, request, make_response
+from flask import Flask, render_template, json, jsonify, request, make_response, redirect
 from flask_cors import CORS
 # r'/*' 是通配符，让本服务器所有的URL 都允许跨域请求
 import requests
@@ -31,15 +32,13 @@ allPageSize = 10
 
 # 当前登录回调的用户
 line_dict = set()
-black_list = []
-zombie_list = []
-friend_list = []
+black_count = 0
+zombie_count = 0
+friend_count = 0
 qrSource = ''
 stepNum = 0
 loginStatus = 0
 remote_url = 'http://159.138.135.12:8080'
-memberList = []
-
 from sqlalchemy.ext.declarative import DeclarativeMeta
 
 
@@ -189,6 +188,13 @@ class ActiveCodeBuy(OutputMixin, db.Model):
         return result
 
 
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            return float(o)
+        super(DecimalEncoder, self).default(o)
+
+
 class UserAmountRecord(OutputMixin, db.Model):
     __tablename__ = 'user_amount_record'
     __table_args__ = {'mysql_engine': 'InnoDB'}  # 支持事务操作和外键
@@ -317,7 +323,8 @@ def admin_login():
         else:
             adminUser = admin.__dict__
             if adminUser['password_hash'] == password:
-                res = {'msg': '成功!', 'code': 200, 'data': admin.single_to_dict()}
+                res = {'msg': '成功!', 'code': 200,
+                       'data': json.loads(json.dumps(admin.single_to_dict(), cls=DecimalEncoder))}
                 return jsonify(res)
             else:
                 res = {'msg': '用户名密码错误!', 'pa': password, 'code': 1001}
@@ -344,7 +351,8 @@ def proxy_login():
         else:
             adminUser = admin.__dict__
             if adminUser['password_hash'] == password:
-                res = {'msg': '成功!', 'code': 200, 'data': admin.single_to_dict()}
+                res = {'msg': '成功!', 'code': 200,
+                       'data': json.loads(json.dumps(admin.single_to_dict(), cls=DecimalEncoder))}
                 return jsonify(res)
             else:
                 res = {'msg': '用户名密码错误!', 'pa': password, 'code': 1001}
@@ -907,6 +915,28 @@ def run_wxpy():
 
 @app.route('/api/login')
 def login_remote_service():
+    cipher_key = request.args.get('key')
+    expire = request.args.get('expire')
+    md5 = request.args.get('md5')
+    if not cipher_key or not expire or not md5:
+        return redirect('/user/login')
+    # 数据校验
+    b1 = (str(expire) + '1989' + cipher_key).encode(encoding='utf-8')
+    m1 = hashlib.md5()
+    m1.update(b1)
+    v_key = m1.hexdigest()
+    if v_key != md5:
+        print('参数被篡改')
+        return redirect('/user/login')
+    if int(time.time()) > int(expire):
+        print('链接过期无效')
+        return redirect('/user/login')
+    # else:
+    #     return render_template('user/QrPage.html')
+    validate = Ciphers.query.filter(Ciphers.cipher == cipher_key, Ciphers.isActive == 1).first()
+    if validate is None:
+        return render_template('user/login.html')
+
     # 查找apikey是否存在
     apikey = re_1.get('apikey')
     if not apikey:
@@ -916,7 +946,6 @@ def login_remote_service():
         result = json.loads(r.text)
         apikey = result.get('data').get('apikey')
         re_1.set('apikey', apikey)
-        print(apikey)
 
     scan_url = 'http://api.aiheisha.com/foreign/message/scanNew.html'
     hswebtime = re_1.get('hswebtime')
@@ -950,7 +979,8 @@ def login_remote_service():
     print(set_response.text)
     global qrSource
     qrSource = ''
-    response = requests.post(url=scan_url, data={'callback_url': remote_url + '/callback_login'},
+    response = requests.post(url=scan_url,
+                             data={'callback_url': remote_url + '/callback_login', 'app_token': cipher_key},
                              headers={'Content-Type': 'application/x-www-form-urlencoded', 'token': token,
                                       'apikey': apikey,
                                       'Hswebtime': hswebtime
@@ -963,12 +993,13 @@ def login_remote_service():
         # threading.Thread(target=run_wxpy).start()
         while not qrSource:
             time.sleep(1)
-        file = urllib.request.urlopen(qrSource)
-        f_data = file.read()
-        file.close()
-        response = make_response(f_data)
-        response.headers['Content-Type'] = 'image/jpeg'
-        return response
+        # file = urllib.request.urlopen(qrSource)
+        # f_data = file.read()
+        # file.close()
+        # response = make_response(f_data)
+        # response.headers['Content-Type'] = 'image/jpeg'
+        # return response
+        return render_template('user/QrPage.html', qrSource=qrSource)
 
     else:
         re_1.delete('apikey')
@@ -1003,17 +1034,26 @@ def user_login():
         ciphers = Ciphers.query.filter(Ciphers.cipher == activity_code, Ciphers.isActive == 1,
                                        Ciphers.bindId > 0).first()
 
-        # user = User.query.filter(User.loginCipher == activity_code).first()
         if ciphers:
             opt = ActiveCodeOption.query.filter_by(id=ciphers.type).first()
             if opt is None:
                 return jsonify({'code': 1003, 'url': '', 'message': '无效卡密'})
             else:
-                if Caltime(time, ciphers.activeTime) <= opt.activeDays:
-                    return jsonify({'code': 200, 'url': '/api/login'})
+                date = datetime.datetime.now()
+                detester = date.strftime("%Y-%m-%d")
+                print(Caltime(detester, ciphers.activeTime.strftime("%Y-%m-%d")))
+                # if Caltime(detester, ciphers.activeTime.strftime("%Y-%m-%d")) <= opt.activeDays:
+                if True:
+                    ticks = int(time.time()) + 30
+                    b = (str(ticks) + '1989' + activity_code).encode(encoding='utf-8')
+                    m = hashlib.md5()
+                    m.update(b)
+                    token_md5 = m.hexdigest()
+                    print('?md5=' + token_md5 + '&expire=' + str(ticks) + '&key=' + activity_code)
+                    return jsonify({'code': 200, 'url': '/api/login' + '?md5=' + token_md5 + '&expire=' + str(
+                        ticks) + '&key=' + activity_code})
                 else:
                     return jsonify({'code': 1003, 'url': '', 'message': '无效卡密'})
-
 
         else:
             return jsonify({'code': 1003, 'url': '', 'message': '无效卡密'})
@@ -1075,11 +1115,11 @@ def callback_login():
         # global line_dict
         # line_dict.add({result['task_id']: result['url']})
         qrSource = result['url']
-    print('请求方式为------->', request.method)
-    args = request.args.get('data') or "args没有参数"
-    print('args参数是------->', args)
-    form = request.form.get('data') or 'form 没有参数'
-    print('form参数是------->', form)
+    # print('请求方式为------->', request.method)
+    # args = request.args.get('data') or "args没有参数"
+    # print('args参数是------->', args)
+    # form = request.form.get('data') or 'form 没有参数'
+    # print('form参数是------->', form)
     return jsonify(args=request.args, form=request.form)
 
 
@@ -1097,8 +1137,6 @@ def callback_send():
 def crowd_log():
     print('---------crowd_log--------------')
     data = request.form.get('data')
-
-    print(data)
     return data
 
 
@@ -1108,18 +1146,19 @@ def message_log():
     print('---------message_log--------------')
     data = request.form.get('data')
     data = json.loads(data)
-    global stepNum
+    step = re_1.get(data.get('my_account') + '_step')
+    step = int(step) if step else None
+    print('当前值为：' + str(data.get('my_account')))
+    print('当前值为：' + str(step))
     if data.get('to_account') == 'filehelper':
-
         if data.get('content') == '100':
             sync_friend_list(data.get('my_account'))
         if data.get('content') == '1':
-            if stepNum == 4:
+            if step == 1:
                 do_action_clean_auto(data.get('my_account'))
         elif data.get('content') == '2':
-            if stepNum == 4:
+            if step == 1:
                 do_action_clean_maul(data.get('my_account'))
-    print(data)
     return data
 
 
@@ -1141,18 +1180,69 @@ def wacat_out():
     data = json.loads(data)
     global loginStatus
     global stepNum
+    # 处理登入登出
+    task_id = data.get('task_id')
+    app_token = data.get('app_token')
+    # 查询用户
+
     if data.get('type') == 1:
-        if loginStatus == 0:
-            loginStatus = 1
-            stepNum = 1
+        cipher = Ciphers.query.filter(Ciphers.cipher == app_token).first()
+        user = User.query.filter(User.id == cipher.bindId).first()
+        if not user.account and user.account == data.get('account') and user.type == 1:
+            pass
+        else:
+            user.account = data.get('account')
+            user.accountAlias = data.get('account_alias')
+            user.name = data.get('name')
+            user.headimg = data.get('thumb')
+            user.type = data.get('type')
+            user.taskId = task_id
+            user.status = 1
+            db.session.add(user)
+            db.session.commit()
+            re_1.set(data.get('account') + '_step', 1)
             send_msg(data.get('account'), 'filehelper', content='欢迎使用云尚清粉 \n 首次初始化 \n 请耐心等待 1～5分钟', content_type=1)
-            time.sleep(30)
-            sync_friend_list(data.get('account'))
+            send_msg(data.get('account'), 'filehelper',
+                     content='开始清理僵尸粉！\n回复 数字 1 发送名片并自动删除 \n回复 数字 2 发送只发送名片不删除\n请根据自己的需要选择对应的数字', content_type=1)
+
     else:
-        loginStatus = 0
+        re_1.set(data.get('account') + '_step', 0)
+        user = User.query.filter(User.taskId == task_id, User.account == data.get('account')).first()
+        user.type = data.get('type')
+        user.status = 0
+        db.session.add(user)
+        db.session.commit()
 
     print(data)
     return data
+
+
+@app.route('/test_html')
+def testHtml():
+    key = request.args.get('key')
+    ticks = int(time.time()) + 30
+    b = (str(ticks) + '1989' + key).encode(encoding='utf-8')
+    m = hashlib.md5()
+    m.update(b)
+    token = m.hexdigest()
+    print('?md5=' + token + '&expire=' + str(ticks) + '&key=' + key)
+    expire = request.args.get('expire')
+    md5 = request.args.get('md5')
+    if len(key) == 0 or len(expire) == 0 or len(md5) == 0:
+        return render_template('user/login.html')
+    # 数据校验
+    b1 = (str(expire) + '1989' + key).encode(encoding='utf-8')
+    m1 = hashlib.md5()
+    m1.update(b1)
+    v_key = m1.hexdigest()
+    if v_key != md5:
+        print('参数被篡改')
+        return render_template('user/login.html')
+    elif int(time.time()) > int(expire):
+        print('链接过期无效')
+        return render_template('user/login.html')
+    else:
+        return render_template('user/QrPage.html')
 
 
 #  有加入群时，接收入群微信信息
@@ -1160,8 +1250,6 @@ def wacat_out():
 def add_group_log():
     print('---------add_group_log--------------')
     data = request.form.get('data')
-
-    print(data)
     return data
 
 
@@ -1170,8 +1258,6 @@ def add_group_log():
 def del_friend_log():
     print('---------del_friend_log--------------')
     data = request.form.get('data')
-
-    print(data)
     return data
 
 
@@ -1240,38 +1326,24 @@ def wchat_out(my_account):
 @app.route('/check_zombie_callback', methods=('GET', 'POST'))
 def check_zombie_callback():
     print('---------check_zombie_callback--------------')
-    # 不为None 则为有问题数据
+    global zombie_count
+    global friend_count
+    global black_count
     data = request.form
-    print(data)
+    step = re_1.get(request.form.get('my_account') + '_step')
+    step = int(step) if step else None
     if data:
-        global black_list
-        global zombie_list
-        global friend_list
-        global memberList
-        global stepNum
         if data.get('result') == '1':
-            zombie_list.append(data)
-            # send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
+            zombie_count = zombie_count + 1
+            send_card_msg(data.get('my_account'), 'filehelper', data.get('account') + '#subtitle#拉黑的好友')
+            if step == 90:
+                # del_friend(data.get('my_account'), account=data.get('account'))
+                print('删除好友')
         if data.get('result') == '2':
-            black_list.append(data)
-        # send_msg(data.get('my_account'), 'filehelper', '----------------被拉黑------------', 1)
-        # send_card_msg(data.get('my_account'), 'filehelper', data.get('account'))
-        # send_msg(data.get('my_account'), 'filehelper', '------------------------------', 1)
+            black_count = black_count + 1
+            send_card_msg(data.get('my_account'), 'filehelper', data.get('account') + '#subtitle#删除的好友')
         if data.get('result') == '0':
-            friend_list.append(data)
-        print(str(len(black_list)) + '_' + str(len(zombie_list)) + '_' + str(len(friend_list)) + '=' + str(
-            len(memberList)))
-        if (len(black_list) + len(zombie_list) + len(friend_list)) == len(memberList):
-            send_msg(data.get('my_account'), 'filehelper',
-                     '僵尸粉检测完毕！\n 总计人数' + str(len(memberList)) + '\n 被拉黑人数' + str(len(black_list)) + '\n 被删除人数' + str(
-                         len(zombie_list)),
-                     1)
-            stepNum = 3
-            time.sleep(5)
-            send_msg(data.get('my_account'), 'filehelper',
-                     '开始清理僵尸粉！\n回复 数字 1 发送名片并自动删除 \n回复 数字 2 发送只发送名片不删除\n请根据自己的需要选择对应的数字', 1)
-            stepNum = 4
-
+            friend_count = friend_count + 1
     else:
         print('-----------------')
     return 'success'
@@ -1308,7 +1380,7 @@ def send_card_msg(my_account, to_account, card_name):
                                       'Hswebtime': hswebtime
                                       })
     result = json.loads(response.text)
-    print('发送名片-----------------' + response.text)
+    # print('发送名片-----------------' + response.text)
 
     return result
 
@@ -1351,72 +1423,50 @@ def sync_friend_list(my_account):
 @app.route('/sync_friend_list_callback', methods=('GET', 'POST'))
 def sync_friend_list_callback():
     print('---------sync_friend_list_callback--------------')
-    print(request.form)
     data = request.form.get('info')
+    # 数据集合
     data = json.loads(data)
-    global memberList
-    memberList.extend(data)
-    print(data)
-    print(memberList)
-    # 判断是否接收完成
-    live = (int(request.form.get('total')) % 100)
-    print((int(int(request.form.get('total')) / 100) + (1 if live > 0 else 0)) == int(request.form.get(
-        'currentPage')))
-    isAll = (int(int(request.form.get('total')) / 100) + (1 if live > 0 else 0)) == int(request.form.get(
-        'currentPage'))
-    if isAll:
-        print('-----数据接收完成-----')
-        send_msg(request.form.get('my_account'), 'filehelper', content='初始化完成，开始工作', content_type=1)
-        context = '本次您的待检查人数 ' + str(request.form.get('total')) + '\n 您的联系人共计 ' + str(
-            request.form.get('total')) + '\n 开始检测僵尸粉'
-        send_msg(request.form.get('my_account'), 'filehelper', content=context, content_type=1)
-        do_action(request.form.get('my_account'))
-    else:
-        print('----等待数据完成----')
+    # 数据长度
+    total_count = int(request.form.get('total'))
+    data_count = len(data)
+    curr_page = int(request.form.get('currentPage'))
+
+    global stepNum
+    global friend_count
+    global zombie_count
+    global black_count
+    live = (int(total_count) % 100)
+    total_page = (int(int(total_count) / 100) + (1 if live > 0 else 0))
+    for index, item in enumerate(data):
+        check_zombie(my_account=request.form.get('my_account'), account=item['account'])
+        print(str(index) + '-----------' + str(len(data) - 1))
+        if index == len(data) - 1:
+            process = 100 if total_page == curr_page else int(((data_count * curr_page) / total_count) * 100)
+            if total_page == curr_page:
+                time.sleep(10 * total_page)
+            send_msg(request.form.get('my_account'), 'filehelper',
+                     content='本次您的待检查人数：' + str(total_count) + '\n处理人数：' + str(
+                         data_count) + '\n 第' + str(
+                         curr_page) + '完成进度：' + str(process) + '%',
+                     content_type=1)
+            if total_page == curr_page:
+                context = '本次您的待检查人数 ' + str(request.form.get('total')) + '\n 您的联系人共计 ' + str(
+                    request.form.get('total')) + '\n 检测僵尸粉完毕\n被拉黑人数：' + str(black_count) + '\n被删除人数:' + str(
+                    zombie_count) + '\n有效好友数：' + str(friend_count)
+                send_msg(request.form.get('my_account'), 'filehelper', content=context, content_type=1)
 
     return jsonify(request.form)
 
 
-def do_action(my_account):
-    global black_list
-    global zombie_list
-    global friend_list
-    global stepNum
-    black_list = []
-    zombie_list = []
-    friend_list = []
-    stepNum = 2
-    if len(memberList) > 0:
-        for item in memberList:
-            check_zombie(my_account=my_account, account=item['account'])
-    pass
-
-
 def do_action_clean_maul(my_account):
-    if len(black_list) > 0:
-        send_msg(my_account, 'filehelper', content='---------被拉黑列表-----------', content_type=1)
-        for item in black_list:
-            send_card_msg(my_account, 'filehelper', item['account'])
-
-    if len(zombie_list) > 0:
-        send_msg(my_account, 'filehelper', content='---------被删除列表-----------', content_type=1)
-        for item in zombie_list:
-            send_card_msg(my_account, 'filehelper', item['account'])
+    re_1.set(my_account + '_step', 80)
+    sync_friend_list(my_account)
     pass
 
 
 def do_action_clean_auto(my_account):
-    if len(black_list) > 0:
-        send_msg(my_account, 'filehelper', content='---------被拉黑列表-----------', content_type=1)
-        for item in black_list:
-            send_card_msg(my_account, 'filehelper', item['account'])
-            del_friend(my_account, item['account'])
-
-    if len(zombie_list) > 0:
-        send_msg(my_account, 'filehelper', content='---------被删除列表-----------', content_type=1)
-        for item in zombie_list:
-            send_card_msg(my_account, 'filehelper', item['account'])
-            del_friend(my_account, item['account'])
+    re_1.set(my_account + '_step', 90)
+    sync_friend_list(my_account)
     pass
 
 
